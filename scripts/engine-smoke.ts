@@ -1,6 +1,6 @@
-import { SCHEMA } from '../src/engine/schema';
-import { MODEL } from '../src/engine/model';
-import { XCHK } from '../src/engine/xcheck';
+import { SCHEMA } from '../src/shared/schema';
+import { MODEL } from '../src/server/engine/model';
+import { XCHK } from '../src/server/engine/xcheck';
 
 const r = MODEL.compute(SCHEMA.defaults());
 if (r.fatal) process.exit(1);

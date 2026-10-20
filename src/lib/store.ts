@@ -1,8 +1,6 @@
 // Browser storage wrapper: every read and write is guarded (private windows, blocked storage).
 export const LS = {
   units: 'csbd.units.v1',
-  cases: 'csbd.cases.v1',
-  last: 'csbd.last.v1',
   tab: 'csbd.tab.v1',
   theme: 'csbd.theme',
 } as const;

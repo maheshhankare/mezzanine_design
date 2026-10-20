@@ -1,5 +1,5 @@
-import { UNITS } from '@/engine/units';
-import { SCHEMA } from '@/engine/schema';
+import { UNITS } from '@/shared/units';
+import { SCHEMA } from '@/shared/schema';
 
 type Inputs = Record<string, any>;
 

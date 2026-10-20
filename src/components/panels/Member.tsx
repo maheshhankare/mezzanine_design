@@ -1,6 +1,5 @@
 'use client';
 
-import { SK } from '@/engine/svg';
 import { useDesign } from '@/state/DesignProvider';
 import { F, UL, UVx } from '@/lib/format';
 import { Card, Checks, Html, KvTable, Pill } from '../common';
@@ -69,14 +68,14 @@ export function MemberPanel({ k }: { k: 'mb' | 'sbi' | 'sbe' }) {
       <div className="rgrid">
         <Card>
           <h3>Section <Pill st={d.overall.status} /></h3>
-          <Html html={SK.section(p, arr, opt, g, { lp: d.spec.lp, mT: mTof(d) })} />
+          <Html html={res.svg?.member?.[k]?.section ?? ''} />
           <KvTable rows={props} caption="Gross properties (calculated)" />
         </Card>
         <Card>
           <h3>End connection holes</h3>
           {cn && (
             <>
-              <Html html={SK.webHoles(cn.geo, cn.adj)} />
+              <Html html={res.svg?.member?.[k]?.webHoles ?? ''} />
               <p className="hint">Holes from the {cn.typeName} (Connections tab). They are not perforations: no Sigma geometry or perforation reduction is used anywhere.</p>
             </>
           )}
@@ -90,7 +89,7 @@ export function MemberPanel({ k }: { k: 'mb' | 'sbi' | 'sbe' }) {
           {d.spec.title}: span {F(d.spec.L, 0)} mm, supports at {d.spec.supports.map((x: number) => F(x, 0)).join(', ')} mm (
           {d.spec.endKr ? 'semi-rigid ends, S_j = ' + UVx(d.spec.endKr / 1e6, 'kN·m/rad', 'S_j', 1).txt + ' ' + UL('kN·m/rad') : 'pinned ends'}){kneeTxt(d, I)}. {loads} {eccTxt} ULS: {d.comb ? d.comb.text : ''}.
         </p>
-        <Html html={SK.beam(d)} />
+        <Html html={res.svg?.member?.[k]?.beam ?? ''} />
         <h4>Restraints in the LTB / torsion model</h4>
         {rows.length ? (
           <table className="rt">

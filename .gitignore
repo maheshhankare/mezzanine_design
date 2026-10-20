@@ -3,3 +3,8 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 _split
+.env
+.env.*
+!.env.example
+/report-test.pdf
+*.pdf

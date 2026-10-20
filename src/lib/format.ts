@@ -1,5 +1,5 @@
-import { U } from '@/engine/util';
-import { UNITS } from '@/engine/units';
+import { U } from '@/shared/util';
+import { UNITS } from '@/shared/units';
 
 export const F: (x: number, d?: number) => string = U.fmt;
 
@@ -33,7 +33,7 @@ export const val = (c: any, v: any): string =>
   v === undefined || v === null
     ? '–'
     : typeof v === 'number'
-      ? UVx(c.fmt ? c.fmt(v) : v, c.unit, (c.sym || '') + ' ' + c.name, 2).txt
+      ? UVx(v, c.unit, (c.sym || '') + ' ' + c.name, 2).txt
       : String(v);
 
 export const stepVal = (v: any, u?: string, h?: string): string =>
