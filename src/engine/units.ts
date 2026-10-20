@@ -6,7 +6,7 @@
 // force, moment, stress …) has its own selected unit; the choice is kept in the project file and in the browser.
 // Conversion is dimensional: every unit is a factor to the SI base of its quantity, so compound units (kN/m², kN·m/rad, kN·cm) are
 // exact and a round trip display → internal → display returns the original value to rounding (≤ 1e-12 relative).
-export const UNITS = (() => {
+export const UNITS: any = (() => {
   const G = 9.80665;
   // quantity → unit → factor to the SI base of the quantity (m, m², m³, m⁴, m⁶, N, N·m, Pa, N/m, N/m², kg/m³, rad, N·m/rad, N/m, kg/m)
   const QTY = {
@@ -131,5 +131,4 @@ export const UNITS = (() => {
   const label = (from, cat) => target(from, cat);
   return { QTY, CATS, BY, PRESETS, defaults, set, get, unit, factor, conv, toDisp, fromDisp, catFor, canon, qtyOf, digits, show, onChange, isDefault, native, label, valid };
 })();
-if (typeof module !== 'undefined' && module.exports) module.exports = UNITS;
 

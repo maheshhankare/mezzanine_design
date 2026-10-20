@@ -3,7 +3,7 @@ import { CHK } from './check';
 import { MEM } from './member';
 // ===== Fastener / weld / plate resistance providers per design route =====
 // Each function returns { Rd (N or N/mm), clause, steps, basis } so the connection engine stays route-independent.
-export const RES = (() => {
+export const RES: any = (() => {
   const s = CHK.s;
   const As = d => MEM.boltAs(d), Ab = d => Math.PI * d * d / 4;
   const fub = g => MEM.boltFu(g);

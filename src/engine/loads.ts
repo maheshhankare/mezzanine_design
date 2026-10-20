@@ -1,7 +1,7 @@
 // @ts-nocheck — ported verbatim from the mockup (index.html, 40_loads.js); logic unchanged so results match the mockup.
 import { U } from './util';
 // ===== Design route factors, load combinations, layout and load path =====
-export const LOADS = (() => {
+export const LOADS: any = (() => {
   const g = 9.80665;
   const kg2kN = q => q * g / 1000; // kg/m² → kN/m²
   // route-specific factors (all values displayed in the report; EN values come from the inputs so a national annex can be applied)

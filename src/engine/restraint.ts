@@ -7,7 +7,7 @@ import { MEM } from './member';
 import { CONN } from './conn';
 import { RES } from './resist';
 // ===== Surface / decking, joist beams, knee braces and bracing =====
-export const RST = (() => {
+export const RST: any = (() => {
   const s = CHK.s, kN = x => x / 1e3, kNm = x => x / 1e6;
   const KRIGID = 1000; // N/mm per mm: continuous lateral spring used when a restraint is demonstrated as "full" (S ≥ S_req)
 

@@ -6,7 +6,7 @@ import { U } from './util';
 //   stiffness EIz (v''), EIw (φ''), GIt (φ'); discrete / continuous lateral springs at a height a above the shear centre and torsional springs;
 //   geometric stiffness from the major-axis moment M(x) (term ∫ M v'' φ dx) and the load height (−½ Σ P a φ²).
 //   Elastic critical moment = λ_cr × M(x): smallest positive eigenvalue of K d = λ G d (validated in the test log against closed forms).
-export const FE = (() => {
+export const FE: any = (() => {
   const G6 = U.gauss01;
   function herm(L, x) {
     const s = x;

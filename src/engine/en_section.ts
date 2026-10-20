@@ -5,7 +5,7 @@ import { SEC } from './section';
 // 5.5.3.2 plane element with edge stiffener (initial K = ∞ effective widths, spring stiffness K eq. 5.10b, σcr,s, χd 5.5.3.1(7));
 // web effective width from the stress ratio of the section with the effective compression flange and the gross web (EN 1993-1-5 4.4(3)).
 // Not implemented: the optional iteration of ρ with σcom,Ed = χd fyb/γM0 (5.5.3.2(10)) – omitting it is conservative.
-export const EN = (() => {
+export const EN: any = (() => {
   const eps = fy => Math.sqrt(235 / fy);
   // EN 1993-1-5:2006+AC:2009 Table 4.1 (internal) and 4.2 (outstand) buckling factors
   function kInternal(psi) {

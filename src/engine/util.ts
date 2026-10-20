@@ -1,7 +1,7 @@
 // @ts-nocheck — ported verbatim from the mockup (index.html, 00_util.js); logic unchanged so results match the mockup.
 // ===== C-section beam system designer: numerical utilities =====
 // Units used throughout the engine: N, mm, N/mm² (MPa). Moments N·mm. Display layer converts to kN, kN·m.
-export const U = (() => {
+export const U: any = (() => {
   const isNum = v => typeof v === 'number' && isFinite(v);
   const num = (v, d) => { const x = typeof v === 'string' ? (v.trim() === '' ? NaN : Number(v)) : Number(v); return isFinite(x) ? x : d; };
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));

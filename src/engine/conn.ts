@@ -4,7 +4,7 @@ import { CHK } from './check';
 import { MEM } from './member';
 // ===== Connection engine: C-type (fin), U-type (U-cleat), angle cleat, end plate, welded, bolted-and-welded =====
 // Coordinates on the supported C web: z from the top of the C (down +), y from the C end (away from the support +).
-export const CONN = (() => {
+export const CONN: any = (() => {
   const s = CHK.s, kN = x => x / 1e3;
   const TYPES = {
     fin: { name: 'C-type fin plate (welded to the support, C web bolted, single shear)', cBolts: true, sBolts: false, plate: true, weldSup: true, weldC: false, planes: 1 },

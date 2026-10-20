@@ -16,7 +16,7 @@ import { CHK } from './check';
 //  Screens are only used with pinned member ends (a semi-rigid end makes the moment depend on the member stiffness).
 // Search = enumeration of the user's permitted grid, screened, then evaluated best-first by the objective: with an objective that is
 // known before analysis, the first candidate that passes every applicable check is the optimum of the grid (given the safe screens).
-export const OPT = (() => {
+export const OPT: any = (() => {
   const list = s => String(s).split(/[,;\s]+/).map(Number).filter(v => isFinite(v) && v > 0);
   const MEM_KEYS = { mb: 'mb_', sbi: 'sbi_', sbe: 'sbe_' };
   const CONN_OF = { mb: 'cm', sbi: 'ci', sbe: 'ce' };

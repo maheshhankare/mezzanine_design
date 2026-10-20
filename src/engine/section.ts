@@ -4,7 +4,7 @@
 // Ct / Cb overall lip lengths (outer face of the flange to the lip tip), t core thickness (no coating), r internal bend radius.
 // Centre-line model: web centre-line at y = 0, bottom flange centre-line at z = 0; flanges point to +y (orientation +1).
 // Centre-line lengths: h = H − t (web), b = B − t (flange), c = C − t/2 (lip); corner centre-line radius r_m = r + t/2.
-export const SEC = (() => {
+export const SEC: any = (() => {
   const RHO = 7850e-9; // kg/mm³
 
   function validate(p) {

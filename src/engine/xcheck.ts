@@ -5,7 +5,7 @@ import { MODEL } from './model';
 import { SCHEMA } from './schema';
 // ===== Reproducibility: engine version, canonical inputs, input fingerprint, result digest, reference cases and the cross-browser self-test =====
 // No DOM here: the same code runs in every browser and in the Node tests, so a browser is compared against exactly the values the tests check.
-export const XCHK = (() => {
+export const XCHK: any = (() => {
   // the calculation-engine version changes only when a formula, method or default that can change a result changes (the app version also changes for UI work)
   const ENGINE_VERSION = '1.3.0';
   // project-file format: 1 = v1.0–v1.2 export {app, version, inputs, cases}; 2 = adds format, engine, fingerprint and a result summary for comparison

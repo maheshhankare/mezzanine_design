@@ -3,7 +3,7 @@ import { U } from './util';
 // ===== Finite-strip method (semi-analytical, simply supported ends, one half-wave; CUFSM formulation) =====
 // Used for (a) the AISI S100-16 Direct Strength Method (local and distortional elastic buckling), (b) a cross-check of the EN 1993-1-3
 // distortional σcr,s. Single C, sharp-corner centre-line model, signature curve over the half-wavelength; minima picked automatically.
-export const FSM = (() => {
+export const FSM: any = (() => {
   const G6x = [-0.932469514203152, -0.6612093864662645, -0.2386191860831969, 0.2386191860831969, 0.6612093864662645, 0.932469514203152];
   const G6w = [0.1713244923791704, 0.3607615730481386, 0.467913934572691, 0.467913934572691, 0.3607615730481386, 0.1713244923791704];
   function stripK(b, t, a, s1, s2, E, NU) {

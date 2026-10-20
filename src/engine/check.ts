@@ -4,7 +4,7 @@ import { U } from './util';
 // basis: 'code' (formula of the selected standard), 'approx' (documented approximation, see method notes), 'num' (numerical model in this tool,
 // validated in the test log), 'user' (user-supplied value), 'none' (resistance not established → REVIEW)
 // status: PASS | FAIL | REVIEW | N/A
-export const CHK = (() => {
+export const CHK: any = (() => {
   function mk(o) {
     const c = Object.assign({ inputs: [], steps: [], basis: 'code', unit: '', why: '', fix: '', note: '' }, o);
     if (c.na) { c.status = 'N/A'; c.eta = null; return c; }

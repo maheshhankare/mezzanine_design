@@ -1,7 +1,7 @@
 // @ts-nocheck — ported verbatim from the mockup (index.html, 05_schema.js); logic unchanged so results match the mockup.
 // ===== Input schema: every user input, its unit, default (Example 3 mapped to C-sections), limits and help =====
 // type: n = number, s = select, b = yes/no, x = text, l = list of numbers (comma separated). opt: blank allowed = "calculated".
-export const SCHEMA = (() => {
+export const SCHEMA: any = (() => {
   const T = [];
   let tab = '', grp = '';
   const tb = (id, label) => { tab = id; T.push({ tabDef: true, id, label }); };

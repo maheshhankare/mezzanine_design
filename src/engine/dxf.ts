@@ -5,7 +5,7 @@ import { U } from './util';
 // ===== Drawings: DXF (AutoCAD R12 ASCII, millimetres, 1:1 model space) and an SVG preview, both from one entity list =====
 // Every drawing is generated from the calculated model (res) and its normalised inputs (res.I); nothing is drawn from stale values.
 // Coordinates: x to the right, y up, mm. Entities: line, pl (polyline), circ, arc, text. Dimensions are drawn as lines + ticks + text.
-export const DWG = (() => {
+export const DWG: any = (() => {
   // layer → AutoCAD colour index, linetype, SVG preview class
   const LAYERS = {
     OUTLINE: [7, 'CONTINUOUS'], HIDDEN: [8, 'DASHED'], CENTER: [1, 'CENTER'], GRID: [8, 'CENTER'], DIM: [3, 'CONTINUOUS'], TEXT: [7, 'CONTINUOUS'],

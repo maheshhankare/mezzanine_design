@@ -7,7 +7,7 @@ import { FSM } from './fsm';
 import { CHK } from './check';
 import { FE } from './fe';
 // ===== Member design of a C-section arrangement (single / back-to-back / four C) =====
-export const MEM = (() => {
+export const MEM: any = (() => {
   const s = CHK.s, kN = x => x / 1e3, kNm = x => x / 1e6;
   const curveAlpha = { a0: 0.13, a: 0.21, b: 0.34, c: 0.49, d: 0.76 };
   function chi(lam, alpha) { if (lam <= 0.2) return 1; const ph = 0.5 * (1 + alpha * (lam - 0.2) + lam * lam); return Math.min(1, 1 / (ph + Math.sqrt(Math.max(0, ph * ph - lam * lam)))); }

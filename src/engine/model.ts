@@ -11,7 +11,7 @@ import { CONN } from './conn';
 import { RES } from './resist';
 import { FE } from './fe';
 // ===== Orchestrator: inputs → load path → members, connections, column, restraints → summary =====
-export const MODEL = (() => {
+export const MODEL: any = (() => {
   const kN = x => x / 1e3, s = CHK.s;
   // External global frame analysis (set only by the unified Mezzanine app; null in this tool = the published behaviour):
   // { beam(dir, spec, ctx) → analyse function or null, system(ctx) → column / knee / bracing / base forces }

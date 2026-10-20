@@ -4,7 +4,7 @@ import { CHK } from './check';
 import { MEM } from './member';
 import { RES } from './resist';
 // ===== Box column (welded box / RHS), base plate, anchors and supporting slab =====
-export const COL = (() => {
+export const COL: any = (() => {
   const s = CHK.s, kN = x => x / 1e3, kNm = x => x / 1e6;
   // rounded-rectangle area properties by polygon integration (outer minus inner)
   function rrect(b, h, r, n = 8) {
