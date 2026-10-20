@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:engine": "tsx scripts/engine-smoke.ts"
   },
   "dependencies": {
     "next": "^15.0.0",

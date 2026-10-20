@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SCHEMA } from '@/engine/schema';
 import { useDesign } from '@/state/DesignProvider';
-import { dispOf, unitOf, validateField, visible } from '@/lib/inputs';
+import { dispOf, intOf, unitOf, validateField, visible } from '@/lib/inputs';
 import { tabLabel } from '@/lib/project';
 
 function Field({ f }: { f: any }) {
@@ -11,7 +11,8 @@ function Field({ f }: { f: any }) {
   const [help, setHelp] = useState(false);
   const [draft, setDraft] = useState<string | null>(null); // text being typed (avoids unit round-trip fighting the caret)
   if (!visible(I, connSel, f.id)) return null;
-  const shown = draft ?? dispOf(f, I[f.id]);
+  // the draft is shown only while it still stands for the stored value (a unit switch or a loaded case drops it)
+  const shown = draft !== null && String(intOf(f, draft)) === String(I[f.id]) ? draft : dispOf(f, I[f.id]);
   const msg = validateField(I, f.id);
   const unit = f.unit ? <span className="unit">{unitOf(f)}</span> : null;
   const onChange = (v: string) => {

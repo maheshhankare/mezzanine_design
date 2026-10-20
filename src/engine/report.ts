@@ -1,4 +1,5 @@
 // @ts-nocheck — ported verbatim from the mockup (index.html, 92_report.js).
+import { APP_VERSION } from './xbref';
 import { U } from './util';
 import { UNITS } from './units';
 import { SCHEMA } from './schema';

@@ -8,8 +8,8 @@ import { XCHK } from '@/engine/xcheck';
 import { REPORT } from '@/engine/report';
 import { OPTUI } from '@/engine/optui';
 import { LS, store, download } from '@/lib/store';
-import { dispOf, intOf } from '@/lib/inputs';
-import { APP_NAME, APP_VERSION, PRESETS, TABS, b64d, b64e, checkProject, diffOf, takeoff } from '@/lib/project';
+import { intOf } from '@/lib/inputs';
+import { APP_NAME, APP_VERSION, PRESETS, TABS, b64d, b64e, checkProject, diffOf } from '@/lib/project';
 import { optHost } from '@/lib/optHost';
 
 type Inputs = Record<string, any>;

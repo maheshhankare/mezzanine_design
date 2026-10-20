@@ -1,4 +1,5 @@
 // @ts-nocheck — ported verbatim from the mockup (index.html, 87_dxf.js); logic unchanged so results match the mockup.
+import { APP_VERSION } from './xbref';
 import { SEC } from './section';
 import { XCHK } from './xcheck';
 import { U } from './util';
