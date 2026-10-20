@@ -8,3 +8,5 @@ _split
 !.env.example
 /report-test.pdf
 *.pdf
+.vercel
+.env*
