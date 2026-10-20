@@ -1,13 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
-import { SK } from '@/engine/svg';
-import { DWG } from '@/engine/dxf';
-import { UNITS } from '@/engine/units';
+import { UNITS } from '@/shared/units';
 import { useDesign } from '@/state/DesignProvider';
 import { F, etaTxt } from '@/lib/format';
-import { TAB_OF, takeoff, tabLabel } from '@/lib/project';
-import { download } from '@/lib/store';
+import { TAB_OF, tabLabel } from '@/lib/project';
 import { Bar, Card, Checks, Html, KvTable, Pill } from '../common';
 
 export function Messages() {
@@ -123,7 +119,7 @@ export function GenPanel() {
       </Card>
       <Card>
         <h3>Arrangement</h3>
-        <Html html={SK.plan(I, res.layout, res.mods)} />
+        <Html html={res.svg?.plan ?? ''} />
       </Card>
       <Card>
         <h3>Analysis model</h3>
@@ -141,7 +137,7 @@ export function GenPanel() {
 }
 
 export function SumPanel() {
-  const { res, I, goto } = useDesign();
+  const { res, takeoff: tk, goto } = useDesign();
   if (!res || res.fatal)
     return (
       <>
@@ -157,8 +153,7 @@ export function SumPanel() {
     all: any[] = rows.flatMap((r) => r.list.map((c: any) => Object.assign({ mod: r.label, key: r.key }, c)));
   const fails = all.filter((c) => c.status === 'FAIL').sort((a, b) => ((b.eta === Infinity) as any) - ((a.eta === Infinity) as any) || (b.eta || 0) - (a.eta || 0));
   const revs = all.filter((c) => c.status === 'REVIEW');
-  const gov = S.overall.gov,
-    tk = takeoff(res, I);
+  const gov = S.overall.gov;
   const diag = (c: any, i: number) => (
     <li key={i}>
       <b>{c.mod}</b> – {c.name} (η {etaTxt(c)}).
@@ -217,62 +212,6 @@ export function SumPanel() {
         </p>
       </Card>
       <Messages />
-    </>
-  );
-}
-
-export function DwgPanel() {
-  const { res, I, toast } = useDesign();
-  const B = useMemo(() => DWG.build(res), [res]);
-  if (B.error)
-    return (
-      <>
-        <Card bad><h3>No drawings</h3><p>{B.error}</p></Card>
-        <Messages />
-      </>
-    );
-  const st = B.status;
-  const lay = Object.keys(DWG.LAYERS).join(', ');
-  return (
-    <>
-      <Card>
-        <h3>Drawings (DXF) <Pill st={st} /></h3>
-        <p>All drawings are generated from the current calculation and update with every input change. Files are AutoCAD R12 DXF (opens in AutoCAD, BricsCAD, DraftSight, LibreCAD, QCAD and most CAM software), in millimetres, drawn 1:1 in model space, with layers {lay}.</p>
-        {st !== 'PASS' && <p className="no"><b>The design does not pass ({st}).</b> Every drawing is stamped “NOT FOR FABRICATION” until all checks pass.</p>}
-        <div className="dwgbar">
-          <button type="button" className="big-btn" id="dw_all" onClick={() => { download(DWG.fileName(I, 'drawings'), DWG.dxf(B.list), 'application/dxf'); toast(`${B.list.length} drawings written to one DXF`); }}>
-            Download all drawings (one DXF)
-          </button>
-          <span className="hint">{B.list.length} drawings. Use the button under each preview for a single drawing.</span>
-        </div>
-        <p className="hint">Cut lengths, end offsets and the member schedule come from the support widths and connection stand-offs in the model; confirm them against the connection details before ordering. Plates, bolts and decking are not in the schedule.</p>
-      </Card>
-      <Card>
-        <h3>Member schedule</h3>
-        <table className="rt">
-          <tbody>
-            <tr><th>Mark</th><th>Qty</th><th>Section</th><th className="num">Cut length [mm]</th><th className="num">kg each</th><th className="num">kg total</th></tr>
-            {B.schedule.map((r: any) => (
-              <tr key={r.mark}>
-                <td>{r.mark}</td><td className="num">{r.qty}</td><td>{r.sec}</td>
-                <td className="num">{F(r.L, 0)}</td><td className="num">{F(r.kg, 1)}</td><td className="num">{F(r.kg * r.qty, 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-      <div className="dwgrid">
-        {B.list.map((D: any) => (
-          <section className="card dwgc" key={D.id}>
-            <h3>{D.title}</h3>
-            <Html html={DWG.svg(D, { maxH: 460 })} />
-            <p>
-              <button type="button" onClick={() => { download(DWG.fileName(I, D.id), DWG.dxf(D), 'application/dxf'); toast('DXF downloaded'); }}>Download DXF</button>{' '}
-              <span className="hint">{DWG.fileName(I, D.id)}</span>
-            </p>
-          </section>
-        ))}
-      </div>
     </>
   );
 }

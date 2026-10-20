@@ -1,7 +1,6 @@
 'use client';
 
-import { SK } from '@/engine/svg';
-import { CHK } from '@/engine/check';
+import { CHK } from '@/shared/check';
 import { useDesign } from '@/state/DesignProvider';
 import { F } from '@/lib/format';
 import { Card, Checks, Html, KvTable, Pill } from '../common';
@@ -17,8 +16,8 @@ export function ConnPanel() {
       <div className="rgrid">
         <Card>
           <h3>{c.typeName} <Pill st={c.overall.status} /></h3>
-          <Html html={SK.webHoles(c.geo, c.adj)} />
-          <Html html={SK.connPlan(c.geo, { e: c.e })} />
+          <Html html={res.svg?.conn?.[connSel]?.webHoles ?? ''} />
+          <Html html={res.svg?.conn?.[connSel]?.connPlan ?? ''} />
         </Card>
         <Card>
           <h3>Stiffness and classification (calculated)</h3>
@@ -43,7 +42,7 @@ export function ConnPanel() {
 }
 
 export function ColPanel() {
-  const { res, I } = useDesign();
+  const { res } = useDesign();
   if (!res || res.fatal) return null;
   const c = res.mods.col,
     b = res.mods.base,
@@ -54,7 +53,7 @@ export function ColPanel() {
       <div className="rgrid">
         <Card>
           <h3>Column section <Pill st={c.overall ? c.overall.status : CHK.overall(c.checks).status} /></h3>
-          <Html html={SK.column(I, pr)} />
+          <Html html={res.svg?.col ?? ''} />
           <KvTable
             caption="Properties (calculated)"
             rows={[
@@ -79,7 +78,7 @@ export function ColPanel() {
       <div className="rgrid">
         <Card>
           <h3>Base plate</h3>
-          <Html html={SK.basePlate(I)} />
+          <Html html={res.svg?.base ?? ''} />
         </Card>
         <Checks list={b.checks} title="Base plate, anchors and slab" />
       </div>
@@ -107,7 +106,7 @@ export function JoistPanel() {
 }
 
 export function KneePanel() {
-  const { res, I } = useDesign();
+  const { res } = useDesign();
   if (!res || res.fatal) return null;
   const k = res.mods.knee;
   if (!k.use) return <Card><p>No knee braces.</p></Card>;
@@ -116,7 +115,7 @@ export function KneePanel() {
       <div className="rgrid">
         <Card>
           <h3>Knee brace <Pill st={CHK.overall(k.checks).status} /></h3>
-          <Html html={SK.knee(I, k)} />
+          <Html html={res.svg?.knee ?? ''} />
         </Card>
         <Card>
           <h3>Forces (ULS)</h3>

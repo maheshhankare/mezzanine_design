@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { SK } from '@/engine/svg';
-import { CHK } from '@/engine/check';
+import { CHK } from '@/shared/check';
 import { BASIS, UL, UVx, etaTxt, stepVal, val } from '@/lib/format';
 
 /** Renders trusted, engine-generated markup (SVG sketches, drawings, report). Never user-supplied text. */
@@ -12,7 +11,15 @@ export function Pill({ st }: { st?: string }) {
   return <span className={`pill p-${(st || 'NA').replace('/', '')}`}>{st || '–'}</span>;
 }
 
-export const Bar = ({ eta }: { eta: any }) => <Html as="span" html={SK.bar(eta)} />;
+export function Bar({ eta }: { eta: any }) {
+  if (eta === null || eta === undefined || !isFinite(eta)) return null;
+  const w = Math.min(100, Math.max(0, eta * 100));
+  return (
+    <span className="bar">
+      <span className={eta > 1 ? 'b-fail' : eta > 0.9 ? 'b-warn' : 'b-ok'} style={{ width: `${w.toFixed(0)}%` }} />
+    </span>
+  );
+}
 
 type Row = [string, any, string?, number?];
 
@@ -45,7 +52,7 @@ function CheckRow({ c }: { c: any }) {
           <Pill st={c.status} /> <span className="nm">{c.name}</span>
           <span className="cl">{c.clause || ''}</span>
         </span>
-        <span className="ce">{c.Ed !== undefined && !na ? `${val(c, c.Ed)} / ${val(c, c.Rd)} ${UL(c.unit, c.name)}` : ''}</span>
+        <span className="ce">{c.Ed !== undefined && !na ? `${val(c, c.EdF ?? c.Ed)} / ${val(c, c.RdF ?? c.Rd)} ${UL(c.unit, c.name)}` : ''}</span>
         <span className="eta">
           {etaTxt(c)} <Bar eta={c.eta} />
         </span>
@@ -61,8 +68,8 @@ function CheckRow({ c }: { c: any }) {
               {c.factor && (<><dt>Factors</dt><dd>{c.factor}</dd></>)}
               <dt>Basis</dt>
               <dd>{BASIS[c.basis] || c.basis}</dd>
-              {c.Ed !== undefined && (<><dt>Demand</dt><dd>{val(c, c.Ed)} {UL(c.unit, c.name)}</dd></>)}
-              {c.Rd !== undefined && (<><dt>Resistance / limit</dt><dd>{val(c, c.Rd)} {UL(c.unit, c.name)}</dd></>)}
+              {c.Ed !== undefined && (<><dt>Demand</dt><dd>{val(c, c.EdF ?? c.Ed)} {UL(c.unit, c.name)}</dd></>)}
+              {c.Rd !== undefined && (<><dt>Resistance / limit</dt><dd>{val(c, c.RdF ?? c.Rd)} {UL(c.unit, c.name)}</dd></>)}
               <dt>Utilisation η</dt>
               <dd>{etaTxt(c)} <Pill st={c.status} /></dd>
             </dl>

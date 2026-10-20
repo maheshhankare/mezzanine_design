@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect } from 'react';
-import { DesignProvider, useDesign } from '@/state/DesignProvider';
+import { DesignProvider, useDesign, type ProjectState, type User } from '@/state/DesignProvider';
 import { Header } from './Header';
 import { LeftNav, Tabs } from './Nav';
 import { InputsPane } from './InputsPane';
 import { DiagDialog } from './DiagDialog';
+import { DetailsDialog } from './DetailsDialog';
 import { OptPane } from './OptPane';
-import { Card, Html } from './common';
+import { Card } from './common';
 import { BracPanel, ColPanel, ConnPanel, DeckPanel, JoistPanel, KneePanel } from './panels/Systems';
 import { MemberPanel } from './panels/Member';
-import { DwgPanel, GenPanel, Messages, SumPanel } from './panels/Overview';
+import { GenPanel, Messages, SumPanel } from './panels/Overview';
+import { DwgPanel } from './panels/Drawings';
 import { tabLabel } from '@/lib/project';
 
 function Results({ tab }: { tab: string }) {
@@ -40,6 +42,7 @@ function Pane() {
       <InputsPane tab={tab} />
       <div className="results">
         <h2>Calculated</h2>
+        {!res && <Card><p>Calculating on the server…</p></Card>}
         {fatal && (
           <>
             <Card bad>
@@ -56,41 +59,37 @@ function Pane() {
 }
 
 function Shell() {
-  const { busy, toastMsg, reportHtml, flush, tab } = useDesign();
-
-  // capture phase: any action button outside the inputs sees results that belong to the inputs on screen
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const t = (e.target as HTMLElement).closest('button, a');
-      if (t && !t.closest('#inputs')) flush();
-    };
-    document.addEventListener('click', onClick, true);
-    return () => document.removeEventListener('click', onClick, true);
-  }, [flush]);
+  const { busy, toastMsg, tab, project } = useDesign();
 
   useEffect(() => {
-    document.title = `${tabLabel(tab)} · C-Section Beam Designer`;
-  }, [tab]);
+    document.title = `${tabLabel(tab)} · ${project.name || 'New project'} · C-Section Beam Designer`;
+  }, [tab, project.name]);
 
   return (
     <>
       <Header />
-      <Tabs />
-      <div id="shell">
-        <LeftNav />
-        <main id="pane"><Pane /></main>
+      <div className="no-print">
+        <Tabs />
+        <div id="shell">
+          <LeftNav />
+          <main id="pane"><Pane /></main>
+        </div>
       </div>
-      <div id="busy" hidden={!busy}>calculating…</div>
-      <div id="toast" hidden={!toastMsg}>{toastMsg}</div>
-      <div id="report"><Html html={reportHtml} /></div>
+      <div className="print-only print-notice">
+        <h2>Printing the application screen is not available</h2>
+        <p>Use <b>Generate PDF Report</b> in the application to produce the engineering report. The PDF can be saved or printed from your PDF viewer.</p>
+      </div>
+      <div id="busy" className="no-print" hidden={!busy}>calculating…</div>
+      <div id="toast" className="no-print" hidden={!toastMsg} role="status">{toastMsg}</div>
       <DiagDialog />
+      <DetailsDialog />
     </>
   );
 }
 
-export default function App() {
+export default function ToolApp({ user, initial }: { user: User; initial: { project: ProjectState; inputs: Record<string, any>; isNew: boolean } }) {
   return (
-    <DesignProvider>
+    <DesignProvider user={user} initial={initial}>
       <Shell />
     </DesignProvider>
   );

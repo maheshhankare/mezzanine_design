@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { SCHEMA } from '@/engine/schema';
+import { SCHEMA } from '@/shared/schema';
 import { useDesign } from '@/state/DesignProvider';
 import { dispOf, intOf, unitOf, validateField, visible } from '@/lib/inputs';
 import { tabLabel } from '@/lib/project';
 
 function Field({ f }: { f: any }) {
-  const { I, setField, connSel } = useDesign();
+  const { I, setField, connSel, canEdit } = useDesign();
   const [help, setHelp] = useState(false);
   const [draft, setDraft] = useState<string | null>(null); // text being typed (avoids unit round-trip fighting the caret)
   if (!visible(I, connSel, f.id)) return null;
@@ -23,7 +23,7 @@ function Field({ f }: { f: any }) {
   if (f.type === 's' || f.type === 'b') {
     const opts: [string, string][] = f.type === 'b' ? [['yes', 'Yes'], ['no', 'No']] : f.opts;
     ctl = (
-      <select id={`f_${f.id}`} data-id={f.id} className={msg ? 'bad' : undefined} value={String(I[f.id])} onChange={(e) => setField(f.id, e.target.value)}>
+      <select id={`f_${f.id}`} data-id={f.id} disabled={!canEdit} className={msg ? 'bad' : undefined} value={String(I[f.id])} onChange={(e) => setField(f.id, e.target.value)}>
         {opts.map((o) => <option key={String(o[0])} value={String(o[0])}>{o[1]}</option>)}
       </select>
     );
@@ -34,6 +34,7 @@ function Field({ f }: { f: any }) {
         data-id={f.id}
         type="text"
         inputMode={f.type === 'n' ? 'decimal' : undefined}
+        readOnly={!canEdit}
         className={msg ? 'bad' : undefined}
         value={shown === undefined ? '' : String(shown)}
         placeholder={f.opt ? 'blank = not given' : undefined}
