@@ -105,6 +105,12 @@ export interface SolveOptions {
   steps: number; // initial number of load increments
   maxSubdivisions: number; // how many times a failed step is halved
   lineSearch: boolean;
+  /**
+   * Second-order theory. 'II' (default): equilibrium on the deformed geometry with LINEAR strains: the geometric term N·G carries P-Δ and P-δ
+   * (EN 1993-1-1 5.2.2 second-order elastic analysis; RSTAB "second order analysis (P-Delta)"). 'vonKarman': adds the quadratic axial strain
+   * (membrane coupling / axial shortening of bent members), i.e. a consistent total-Lagrangian formulation with an exact tangent.
+   */
+  theory: 'II' | 'vonKarman';
   /** include the torsional geometric term (N·ip/A) */
   torsionGeometric: boolean;
   /** truss elements with tensionOnly are switched off when compressed */
@@ -125,6 +131,7 @@ export const DEFAULT_OPTIONS: SolveOptions = {
   maxSubdivisions: 6,
   lineSearch: true,
   torsionGeometric: false,
+  theory: 'II',
   tensionOnly: true,
 };
 
@@ -160,6 +167,12 @@ export interface ElementResult {
   /** section forces along the member at element ends (tension / sign conventions in docs): [x, N, Vy, Vz, T, My, Mz] */
   stations: number[][];
   active?: boolean;
+  /** data to evaluate section forces at any station of the element */
+  kind?: 'beam' | 'truss';
+  L?: number;
+  x0?: number;
+  ut?: number[]; // local displacement + stress-free imperfection
+  q?: number[]; // local line load at the load level reached
 }
 
 export interface SolveResult {

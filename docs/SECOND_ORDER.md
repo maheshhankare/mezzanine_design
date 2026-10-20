@@ -1,12 +1,19 @@
 # Second-order frame analysis (new analysis mode)
 
-Status: **solver core implemented and verified against closed-form solutions. Not yet validated against the RSTAB benchmark, not yet connected to the user interface, EN 1993 / IS 800 imperfection rules and design checks not yet implemented.** Nothing in the existing load-path model was changed; the new code lives in `src/server/frame/` and is not imported by the application yet.
+Status: **solver core implemented and verified against closed-form solutions (50 checks), and validated against the RSTAB benchmark (first and second order, 2,924 members) within the 2 % target except 119 column M_y values at ≤ 2.5 %; see `docs/RSTAB_BENCHMARK.md`.** Not yet connected to the user interface. EN 1993 / IS 800 imperfection rules, National Annex selection and design checks are **not implemented**: the official code texts have not been supplied (`docs/CODE_REGISTER.md`). Nothing in the existing load-path model was changed; the new code lives in `src/server/frame/` and is not imported by the application yet.
 
 ## 1. Why a new solver
 
 The existing engine has no frame-level finite-element model: members are analysed one at a time (a 2-DOF-per-node beam FE for bending and a Vlasov FE for lateral-torsional buckling), and the column, brace and sway effects come from a load-path model with notional forces and buckling-length factors. A full second-order analysis (P-Δ and P-δ) of a 3D frame needs a new beam-column frame solver, so it is a separate module.
 
 ## 2. Formulation
+
+**Two second-order theories are implemented** (`SolveOptions.theory`):
+
+* **`'II'` (default)**: linear strains, equilibrium on the deformed geometry; P-Δ and P-δ enter only through the geometric term N·G (EN 1993-1-1 5.2.2 "second-order elastic analysis"; RSTAB "second order analysis (P-Delta)"). Symmetric secant tangent K_b + (EA/L)aaᵀ + N·G, solved by Newton iterations.
+* **`'vonKarman'`**: adds the quadratic axial strain (membrane coupling), total-Lagrangian with the exact consistent tangent described below. It additionally captures the axial shortening of bent members, which produced a spurious out-of-plane drift of edge beams in the benchmark and is not what code-based second-order elastic analysis assumes.
+
+The kinematic description below is the von Kármán one; for Theory II the axial strain is simply ε = δ/L and the force term N(a + G(u+u₀)) is kept.
 
 Units N, mm, N/mm². Local axes: x along the member, y = (reference vector × x) normalised, z = x × y; the reference vector is global Z (global X for vertical members); an optional β rotates y, z about x.
 
@@ -70,9 +77,9 @@ Performance (synthetic 2,944-member frame, 4 elements per member, 68,000 DOF): a
 * P-δ accuracy depends on the elements per member (Euler load error 0.75 % with 2, 0.05 % with 4). The default for columns should be 4.
 * Member loads are applied as equivalent nodal loads; internal moments between nodes follow from equilibrium on the deformed shape.
 
-## 6. Not done yet (needs your input or the benchmark data)
+## 6. Not done yet
 
-1. **RSTAB benchmark.** The report PDF (726 pages) lists geometry only by member connectivity and length. The `.rs8` file is a proprietary binary container whose model data (relative node definitions, hinge, support and load tables) cannot be decoded reliably without Dlubal's specification. Needed in a parseable form: **nodes with coordinates, materials, hinge definitions, nodal supports, member eccentricities and divisions, all load cases (LC1, LC2, LC6, LC7 with their loads), imperfection definitions, stiffness-modification factors and the calculation parameters** (RSTAB: print or export these tables, as text-based PDF or Excel/CSV).
-2. Importer and benchmark comparison (target ≤ 2 % on member forces and displacements, under identical modelling assumptions).
-3. Imperfections: user-defined and code-based column bows / sway. EN 1993-1-1 5.3.2 equivalent rules can be implemented from the code; **the IS 800 provisions and the National Annex values to use must be confirmed from the code text** before implementation (anything unverified will be flagged, not assumed).
-4. EN 1993 and IS 800 verification checks fed by the converged results, user interface, iteration-log display, PDF sections.
+1. **Confirmations in RSTAB** of the inferred settings (shear deformation off, imperfection loads from CO1, stiffness factors = 1): `docs/RSTAB_BENCHMARK.md`, section 2.
+2. **Code provisions.** Implementation of IS 800 (4.3.6, 4.3.6.1, 4.3.6.2, 4.4.3, 4.4.3.1, Annex B) and EN 1993-1-1 (5.2, 5.3) imperfections, conditions of use and design checks needs the **official texts**; the National Annex of the project must be chosen by you. Everything is tracked in `src/shared/codeRegister.ts` / `docs/CODE_REGISTER.md` with status *pending*.
+3. Geometric (explicit) imperfections validated against RSTAB (the benchmark covers equivalent loads only), code-based generation, user interface for the analysis settings, iteration-log display, PDF sections.
+4. Performance for web use: the benchmark model (11,500 DOF) solves in ~3 s with one element per member; 29,000 DOF (4/2 elements per column/beam) in ~12 s.

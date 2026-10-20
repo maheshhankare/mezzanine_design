@@ -103,7 +103,7 @@ export interface EvalOut {
 }
 
 /** Evaluate a beam element. u, u0 local (12). secondOrder=false returns the linear response. */
-export function beamEval(p: BeamProps, Kb: Float64Array, G: Float64Array, u: Float64Array, u0: Float64Array | null, secondOrder: boolean): EvalOut {
+export function beamEval(p: BeamProps, Kb: Float64Array, G: Float64Array, u: Float64Array, u0: Float64Array | null, secondOrder: boolean, vonKarman = false): EvalOut {
   const { L, EA } = p;
   const f = new Float64Array(12);
   const K = new Float64Array(144);
@@ -141,7 +141,9 @@ export function beamEval(p: BeamProps, Kb: Float64Array, G: Float64Array, u: Flo
       quad0 += u0[i] * s;
     }
   }
-  const eps = delta / L + (quad - quad0) / (2 * L);
+  // vonKarman: the axial strain includes the quadratic transverse term (membrane coupling, 'bow-string shortening').
+  // Theory II (default, EN 1993-1-1 5.2.2 / RSTAB P-Delta): linear strain, equilibrium on the deformed geometry through the geometric term only.
+  const eps = vonKarman ? delta / L + (quad - quad0) / (2 * L) : delta / L;
   const N = EA * eps;
   // v = a + G ut
   const v = Gu; // reuse
@@ -151,7 +153,7 @@ export function beamEval(p: BeamProps, Kb: Float64Array, G: Float64Array, u: Flo
   const k = EA / L;
   for (let i = 0; i < 12; i++) {
     const vi = k * v[i];
-    for (let j = 0; j < 12; j++) K[i * 12 + j] += vi * v[j] + N * G[i * 12 + j];
+    for (let j = 0; j < 12; j++) K[i * 12 + j] += (vonKarman ? vi * v[j] : (k * (i === 0 ? -1 : i === 6 ? 1 : 0)) * (j === 0 ? -1 : j === 6 ? 1 : 0)) + N * G[i * 12 + j];
   }
   return { f, K, N, eps };
 }
@@ -167,7 +169,7 @@ export function trussG(L: number): Float64Array {
   return G;
 }
 
-export function trussEval(p: TrussProps, G: Float64Array, u: Float64Array, u0: Float64Array | null, secondOrder: boolean, tensionOnly: boolean): EvalOut & { active: boolean } {
+export function trussEval(p: TrussProps, G: Float64Array, u: Float64Array, u0: Float64Array | null, secondOrder: boolean, tensionOnly: boolean, vonKarman = false): EvalOut & { active: boolean } {
   const { L, EA } = p;
   const f = new Float64Array(6);
   const K = new Float64Array(36);
@@ -188,7 +190,7 @@ export function trussEval(p: TrussProps, G: Float64Array, u: Float64Array, u0: F
   let quad = 0, quad0 = 0;
   for (let i = 0; i < 6; i++) quad += ut[i] * Gu[i];
   if (u0) for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += G[i * 6 + j] * u0[j]; quad0 += u0[i] * s; }
-  const eps = delta / L + (quad - quad0) / (2 * L);
+  const eps = vonKarman ? delta / L + (quad - quad0) / (2 * L) : delta / L;
   const active = !(tensionOnly && eps < 0);
   if (!active) return { f, K, N: 0, eps, active };
   const N = EA * eps;
@@ -196,7 +198,7 @@ export function trussEval(p: TrussProps, G: Float64Array, u: Float64Array, u0: F
   v[0] -= 1; v[3] += 1;
   for (let i = 0; i < 6; i++) f[i] = N * v[i];
   const k = EA / L;
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) K[i * 6 + j] = k * v[i] * v[j] + N * G[i * 6 + j];
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) K[i * 6 + j] = (vonKarman ? k * v[i] * v[j] : k * (i === 0 ? -1 : i === 3 ? 1 : 0) * (j === 0 ? -1 : j === 3 ? 1 : 0)) + N * G[i * 6 + j];
   return { f, K, N, eps, active };
 }
 

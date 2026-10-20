@@ -73,10 +73,10 @@ export function solveFrame(input: SolveInput): SolveResult {
       for (let r = 0; r < e.nLocal; r++) { let s = 0; for (let c = 0; c < e.nq; c++) s += e.M[r * e.nq + c] * q[c]; ul[r] = s; }
       let fl: Float64Array, Kl: Float64Array, N: number, eps: number, active = true;
       if (e.kind === 'beam') {
-        const o = beamEval(e.props as any, e.Kb!, e.G, ul, u0l[e.index], so);
+        const o = beamEval(e.props as any, e.Kb!, e.G, ul, u0l[e.index], so, opt.theory === 'vonKarman');
         fl = o.f; Kl = o.K; N = o.N; eps = o.eps;
       } else {
-        const o = trussEval(e.props as any, e.G, ul, u0l[e.index], so, opt.tensionOnly && e.tensionOnly);
+        const o = trussEval(e.props as any, e.G, ul, u0l[e.index], so, opt.tensionOnly && e.tensionOnly, opt.theory === 'vonKarman');
         fl = o.f; Kl = o.K; N = o.N; eps = o.eps; active = o.active;
         if (!active) {
           // tiny residual stiffness keeps the matrix regular
@@ -318,7 +318,9 @@ function recoverElements(ps: Prepared, evals: ElemEval[], u: Float64Array, u0l: 
         stations.push([x0 + x, N, Vy, Vz, -fl[3], My, Mz]);
       }
     }
-    out.push({ member: e.member, element: e.index, fLocal: Array.from(fl), stations, active: ev.active });
+    const utAll = Float64Array.from(ev.ul);
+    if (u0l[e.index]) for (let i = 0; i < utAll.length; i++) utAll[i] += u0l[e.index]![i];
+    out.push({ member: e.member, element: e.index, fLocal: Array.from(fl), stations, active: ev.active, kind: e.kind, L: e.L, x0: e.x0, ut: Array.from(utAll), q: qLocal[e.index].map((v) => v * lam) });
   }
   return out;
 }
@@ -396,4 +398,40 @@ export function criticalLoadFactor(ps: Prepared, combo: LoadTerm[], options?: Pa
     if (negAt(mid) > 0) hi = mid; else lo = mid;
   }
   return { lambda: (lo + hi) / 2, evaluations: evals };
+}
+
+/**
+ * Section forces of an element at distance x from its start (equilibrium of the left part on the deformed geometry, P-δ included).
+ * Returns [N, Vy, Vz, T, My, Mz] with tension positive; shear and moment on the positive face of the section.
+ */
+export function sectionForcesAt(el: ElementResult, x: number, deformedShear = false): number[] {
+  const f = sectionForcesLocal(el, x);
+  if (!deformedShear || el.kind === 'truss') return f;
+  // shear forces referred to the DEFORMED member axis (RSTAB option "refer internal forces to deformed system"): V' = V − N·slope
+  const L = el.L!, ut = el.ut!;
+  const t = x / L;
+  const d1 = (-6 * x) / (L * L) + (6 * x * x) / (L * L * L), d2 = 1 - (4 * x) / L + (3 * x * x) / (L * L), d3 = (6 * x) / (L * L) - (6 * x * x) / (L * L * L), d4 = (-2 * x) / L + (3 * x * x) / (L * L);
+  void t;
+  const sy = d1 * ut[1] + d2 * ut[5] + d3 * ut[7] + d4 * ut[11];
+  const sz = d1 * ut[2] - d2 * ut[4] + d3 * ut[8] - d4 * ut[10];
+  return [f[0], f[1] - f[0] * sy, f[2] - f[0] * sz, f[3], f[4], f[5]];
+}
+
+function sectionForcesLocal(el: ElementResult, x: number): number[] {
+  const fl = el.fLocal;
+  if (el.kind === 'truss') return [x <= 1e-9 ? -fl[0] : fl[3], 0, 0, 0, 0, 0];
+  const L = el.L!, ut = el.ut!, q = el.q!;
+  if (x <= 1e-9) return [-fl[0], -fl[1], -fl[2], -fl[3], -fl[4], -fl[5]];
+  if (x >= L - 1e-9) return [fl[6], fl[7], fl[8], fl[9], fl[10], fl[11]];
+  const H = herm(L, x);
+  const vx = H[0] * ut[1] + H[1] * ut[5] + H[2] * ut[7] + H[3] * ut[11];
+  const wx = H[0] * ut[2] - H[1] * ut[4] + H[2] * ut[8] - H[3] * ut[10];
+  return [
+    -fl[0] - q[0] * x,
+    -fl[1] - q[1] * x,
+    -fl[2] - q[2] * x,
+    -fl[3],
+    -fl[4] - x * fl[2] - (ut[2] - wx) * fl[0] - (q[2] * x * x) / 2,
+    -fl[5] + x * fl[1] + (ut[1] - vx) * fl[0] + (q[1] * x * x) / 2,
+  ];
 }
