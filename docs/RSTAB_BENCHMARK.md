@@ -1,6 +1,6 @@
 # RSTAB benchmark: Mezzanine 3x5 Base
 
-Reference: `Mezzanine RSTAB Report.pdf` and `Mezzanine RSTAB Report - Detail 1.pdf` (RSTAB printouts supplied by the user) and the model file `Mezzanine 3x5_Base.rs8` (a proprietary binary; it could not be decoded, so the printouts are the data source).
+Reference: `Mezzanine RSTAB Report.pdf` and `Mezzanine RSTAB Report - Detail 1.pdf` (RSTAB printouts supplied by the user) and the model file `Mezzanine 3x5_Base.rs8` (an OLE binary; the printouts are the main data source, calculation settings were decoded from it, see 2a).
 Model: two-level mezzanine, 30 m × 40 m (10 × 8 bays of 3 m × 5 m), storey height 4.5 m, 99 fixed columns, 1,567 nodes, 2,924 members (2,144 beams, 712 N-only braces, 68 "Null" dummy members that carry no stiffness and are ignored).
 Reproduce: `npx tsx scripts/rstab/parse-report.ts <report.txt> benchmarks/rstab-3x5` then `npx tsx scripts/rstab/compare.ts CO1|CO2 [divColumn] [divBeam]`. The raw outputs are in `benchmarks/rstab-3x5/results/`.
 
@@ -26,6 +26,27 @@ Reproduce: `npx tsx scripts/rstab/parse-report.ts <report.txt> benchmarks/rstab-
 5. **Imperfection loads are equivalent loads**: every column member with compression N (from CO1, first order) contributes +φ₀·N at its top node and −φ₀·N at its bottom node, φ₀ = 1/200, direction +X (the −X sign gives errors of 30–900 %). The gravity combination used by RSTAB for N is assumed to be CO1.
 6. **Shears are referred to the deformed system** in CO2 (RSTAB option, printed for all combinations): V′ = V − N·slope.
 7. **Stiffness modification factors** are "activated" in RSTAB, but their values are not printed; taken as 1.0. The agreement suggests this is right.
+
+### 2a. Settings read from the model file `Mezzanine 3x5_Base.rs8`
+
+The `.rs8` is an OLE compound file; its stream `RSTAB_Data 6.002` holds self-describing record schemas (field name + type) followed by records. The per-case calculation-parameter records were decoded and cross-checked against the printout (CO1 linear, CO2 second order). Status of the six settings:
+
+| # | Setting | Result from the model file | Status |
+|---|---|---|---|
+| 1 | Shear deformation | `bElemShearStiff` = 0 (global calculation parameters) | **Confirmed**: off |
+| 2 | Theory II vs large deformation | CO1 `Theory` = 0 (linear), CO2 `Theory` = 1 (second order); max iterations 100, Picard iterations 5, load increments 1 | **Confirmed**: second order; the file has no separate flag distinguishing Theory II from von Kármán, so Theory II remains inferred from the results |
+| 3 | LC6 / LC7 direction | Direction code differs between the two records (LC6 vs LC7), consistent with the printed "Dir. y" / "Dir. z" | **Partly confirmed**: the stored codes differ as printed; the physical sense (+X for LC7) is still inferred from the results |
+| 4 | Imperfection value | Drift = 200 (i.e. 1/200) stored in both imperfection records (float 200.0 at stream offsets 804104 and 809884) | **Confirmed** |
+| 5 | Gravity combination used for the imperfection loads | `$ImperfectionGravityLoadCombinationNo` not decoded | **Unresolved** (assumed CO1) |
+| 6 | Stiffness modification factors | flags for cross-section and member stiffness modification are on (`bEnteredStiffModif` = 1, CrossSection = Member = 1); the numeric factor tables (`StiffFactorEI*`, `FactorM*`/`FactorA*`) were not located unambiguously | **Unresolved numerically.** Indirect evidence: with factors = 1, the first-order combination CO1 reproduces all 22,000 member-force rows and 99 supports within 0.06 % (statically indeterminate frame, so a uniform deviation in stiffness would show) |
+
+Also decoded: CO1 "favourable effect of tension" on, shear forces referred to the deformed system on (CO1 and CO2), refinement increments 10. The scripts used are throw-away exploration code, not part of the repository; the stream offsets above are given so the decode can be repeated.
+
+### 2b. Column M_y (≤ 2.5 %) and rotation (≤ 0.2 mrad) differences: classification
+
+* Rotations: 0.2 mrad is 2 × the print resolution (0.1 mrad) at the level of a 5 %-of-maximum floor → **print rounding / normalisation**, not a modelling difference.
+* Beam V_y 3.5 % (0.23 vs 0.00 kN): at the print-resolution level → **print rounding**.
+* Column M_y 119 rows ≤ 2.5 % (≈ 2.7 kNcm absolute): **unresolved**. It is identical for 1 and 4 elements per column (not a mesh/numerical effect) and absent in first order (0.06 %), so it comes from the second-order part: candidates are the imperfection-load generation (gravity combination, per-member N used for the loads), or the stiffness factors. It is not tuned away.
 
 ## 3. Comparison method (fixed before judging)
 
