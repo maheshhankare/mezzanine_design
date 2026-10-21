@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { FrameModel, FMember, LoadCase, MemberLoad } from '../../src/server/frame/types';
 
-const dir = 'benchmarks/rstab-3x5';
+const dir = process.env.BENCH ?? 'benchmarks/rstab-3x5';
 const read = <T>(f: string): T => JSON.parse(readFileSync(`${dir}/${f}.json`, 'utf8'));
 export interface RNode { id: number; x: number; y: number; z: number }
 export interface RMember { id: number; type: 'beam' | 'truss' | 'null'; n1: number; n2: number; beta: number; sec1: number; sec2: number; hinge1: number; hinge2: number; ecc: number; div: number; length: number; dir: string }
@@ -30,8 +30,8 @@ export interface BuildOptions {
   divColumn: number;
   divBeam: number;
   /**
-   * Shear deformation. The CO1 comparison shows that the RSTAB calculation did NOT use shear deformation (no shear stiffness):
-   * with it the beam shears / moments differ by up to 9 %, without it by < 0.6 %. ASSUMPTION to be confirmed in the RSTAB calculation parameters.
+   * Shear deformation with the printed shear areas. Detail 1 model (benchmarks/rstab-3x5): OFF (bElemShearStiff = 0 in the .rs8; with it the
+   * differences were up to 9 %). Detail 2 model (benchmarks/rstab-3x5-v2): ON (bElemShearStiff = 1; without it the differences are 3-45 %).
    */
   shearDeformation?: boolean;
 }

@@ -24,6 +24,12 @@ export interface SolveInput {
   options?: Partial<SolveOptions>;
   /** stress-free initial geometry error: global nodal field, 6 values per node index (prepared.nNodes*6) */
   imperfection?: Float64Array | null;
+  /**
+   * Additional stress-free imperfection per ELEMENT in element-local components (12 for a beam: u1, θ1, u2, θ2; 6 for a truss), added to the
+   * local imperfection derived from the nodal field. Needed where an element is tilted or kinked independently of its neighbours at a node
+   * (a leaning column framing into horizontal beams): the nodal field alone cannot represent that.
+   */
+  elementImperfection?: Map<number, Float64Array> | null;
 }
 
 interface ElemEval { f: Float64Array; N: number; eps: number; active: boolean; ul: Float64Array }
@@ -48,11 +54,12 @@ export function solveFrame(input: SolveInput): SolveResult {
   for (const e of ps.elements) if (e.kind === 'beam' && e.G.length === 0) e.G = beamG(e.L, (e.props as any).ipA, opt.torsionGeometric);
   // local imperfection of each element
   const u0l: (Float64Array | null)[] = ps.elements.map((e) => {
-    if (!input.imperfection) return null;
+    const extra = input.elementImperfection?.get(e.index);
+    if (!input.imperfection) return extra ? Float64Array.from(extra) : null;
     const q = new Float64Array(e.nq);
     for (let c = 0; c < e.nq; c++) { const d = e.dofs[c]; q[c] = d < input.imperfection.length ? input.imperfection[d] : 0; }
     const out = new Float64Array(e.nLocal);
-    for (let r = 0; r < e.nLocal; r++) { let s = 0; for (let c = 0; c < e.nq; c++) s += e.M[r * e.nq + c] * q[c]; out[r] = s; }
+    for (let r = 0; r < e.nLocal; r++) { let s = 0; for (let c = 0; c < e.nq; c++) s += e.M[r * e.nq + c] * q[c]; out[r] = s + (extra ? extra[r] : 0); }
     return out;
   });
 

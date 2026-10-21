@@ -40,7 +40,7 @@ const supNodes: number[] = [];
 // ---- sets of members
 const sets: { id: number; members: number[]; length: number }[] = [];
 {
-  const text = lines.slice(iSets + 1, iLoadCases).join(' ');
+  const text = lines.slice(iSets + 1, iLoadCases).filter((l) => !/^(=== PAGE|1\.11 SETS OF MEMBERS|Set Set of Members|No\. Description Type)/.test(l)).join(' ').replace(/\s+/g, ' ').replace(/ member (?=\d+ Continuous)/g, ' '); // drop the page headers that interrupt an entry; a split 'member' word of the previous entry
   const re = /(\d+) Continuous Members \d+ Contin\.? ?(?:m(?:ember)?)? ?([\d,\- ]+?) (\d+\.\d)(?= \d+ Continuous|$)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -95,7 +95,8 @@ const support: Record<string, Record<string, number[]>> = {};
 const defo: Record<string, Record<string, number[]>> = {};
 {
   let node = 0;
-  const end = iRC > iDef ? iRC : lines.length;
+  const iNext = idx(/^4.7 MEMBERS/, iDef); // later sections (local / global deformations) have the same row layout
+  const end = iNext > iDef ? iNext : iRC > iDef ? iRC : lines.length;
   for (let i = iDef; i < end; i++) {
     const m = lines[i].match(/^(?:(\d+) )?(CO\d) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/);
     if (!m) continue;

@@ -13,6 +13,7 @@
     "test:api": "node scripts/test-api.mjs",
     "test:bundle": "node scripts/test-bundle.mjs",
     "test:frame": "tsx scripts/test-frame.ts",
+    "test:rstab": "tsx scripts/rstab/regress.ts",
     "test:pdf": "tsx --conditions=react-server scripts/test-pdf.ts",
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts"
   },

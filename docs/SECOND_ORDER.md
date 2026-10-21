@@ -1,6 +1,6 @@
 # Second-order frame analysis (new analysis mode)
 
-Status: **solver core implemented and verified against closed-form solutions (50 checks), and validated against the RSTAB benchmark (first and second order, 2,924 members) within the 2 % target except 119 column M_y values at ≤ 2.5 %; see `docs/RSTAB_BENCHMARK.md`.** Not yet connected to the user interface. EN 1993 / IS 800 imperfection rules, National Annex selection and design checks are **not implemented**: the official code texts have not been supplied (`docs/CODE_REGISTER.md`). Nothing in the existing load-path model was changed; the new code lives in `src/server/frame/` and is not imported by the application yet.
+Status: **solver core implemented and verified against closed-form solutions (61 checks), validated against the RSTAB benchmark (first and second order, 2,924 members; both the Detail 1 and the current Detail 2 model) within the 2 % target except one result type with a documented, unexplained small offset; see `docs/RSTAB_BENCHMARK.md`.** Explicit geometric imperfections (sway, bow) and equivalent sway loads are implemented (`src/server/frame/imperfection.ts`) and checked against each other. Not yet connected to the user interface. EN 1993 / IS 800 imperfection values, National Annex selection and design checks are **not implemented**: the official code texts have not been supplied (`docs/CODE_REGISTER.md`); the code routes of the imperfection module refuse to run while the register items are unverified. Nothing in the existing load-path model was changed; the new code lives in `src/server/frame/` and is not imported by the application yet.
 
 ## 1. Why a new solver
 
@@ -45,7 +45,7 @@ Newton–Raphson with the full tangent, per load step (default 4 increments; a f
 * A failed step keeps the last converged state separate from the failed trial (`failedTrial`); the status is `not-converged` with the reason; every attempt and iteration (residuals, maximum correction, energy) is logged.
 * Convergence and code compliance are separate: a converged analysis says nothing about safety.
 
-## 4. Verification performed (`npm run test:frame`, 50 checks, all passed)
+## 4. Verification performed (`npm run test:frame`, 61 checks, all passed; the last 11 are the imperfection checks of section 6)
 
 Closed-form references only (these do **not** involve RSTAB):
 
@@ -77,9 +77,46 @@ Performance (synthetic 2,944-member frame, 4 elements per member, 68,000 DOF): a
 * P-δ accuracy depends on the elements per member (Euler load error 0.75 % with 2, 0.05 % with 4). The default for columns should be 4.
 * Member loads are applied as equivalent nodal loads; internal moments between nodes follow from equilibrium on the deformed shape.
 
-## 6. Not done yet
+## 6. Imperfections (module `imperfection.ts`)
 
-1. **Confirmations in RSTAB** of the inferred settings (shear deformation off, imperfection loads from CO1, stiffness factors = 1): `docs/RSTAB_BENCHMARK.md`, section 2.
-2. **Code provisions.** Implementation of IS 800 (4.3.6, 4.3.6.1, 4.3.6.2, 4.4.3, 4.4.3.1, Annex B) and EN 1993-1-1 (5.2, 5.3) imperfections, conditions of use and design checks needs the **official texts**; the National Annex of the project must be chosen by you. Everything is tracked in `src/shared/codeRegister.ts` / `docs/CODE_REGISTER.md` with status *pending*.
-3. Geometric (explicit) imperfections validated against RSTAB (the benchmark covers equivalent loads only), code-based generation, user interface for the analysis settings, iteration-log display, PDF sections.
-4. Performance for web use: the benchmark model (11,500 DOF) solves in ~3 s with one element per member; 29,000 DOF (4/2 elements per column/beam) in ~12 s.
+Two mechanically equivalent representations. They enter only through the geometric term N·G(u+u₀), so they are **never added together for the same effect**.
+
+| Representation | Function | What it is |
+|---|---|---|
+| Equivalent loads | `swayLoads` | ±φ₀·N at the ends of each compressed column member, N from a first-order gravity solution (frozen). This is what RSTAB's "inclination on a set of members" does (benchmark). |
+| Explicit geometry, sway | `swayGeometry(…, 'columns')` | stress-free straight tilt of each column element, in element-local components (`SolveInput.elementImperfection`): upper end displaced φ₀·Δh, both ends rotated φ₀. Nothing else in the structure moves. Current N is used. |
+| Explicit geometry, whole structure | `swayGeometry(…, 'structure')` | "shear building" lean: all nodes at height h displaced φ₀·h, floors rigid, columns tilted. Braces and beams see the lean as well: a different imperfection model. |
+| Explicit geometry, bow | `bowGeometry` | e₀·sin(πx/L) per element (element-local), ≥ 3 elements per member; slopes exact. |
+
+Why element-local: a joint shares its rotation with the beams, so a nodal field cannot make one column element lean without distorting the beams that frame into it; a first attempt with a nodal field gave results 30–100 % off the equivalent loads, the element-local form agrees within 0.5 %.
+
+**Checks (all in `npm run test:frame`):** a tilted cantilever column at P = 0.5 P_e against the closed form φ₀(tan kL − kL)/k (1e-4 %); geometry = equivalent loads on the same column (1e-12 %); geometry **and** loads together = exactly twice the single effect (double counting, 1e-14 %); bow against P e₀/(1 − P/P_cr) (3e-3 %).
+
+**On the 2,924-member benchmark** (Detail 2, CO1, 4/2 elements; `results/imperfection-study_div4-2.txt`), differences to the equivalent-load run, normalised by the largest value of each quantity:
+
+| Imperfection | displacements | N, V | M | support |
+|---|---|---|---|---|
+| geometry, columns only | 0.33 % | 0.50 % | 0.05 % | 0.16 % |
+| geometry, whole structure leaning | 28.9 % | 0.52 % | 1.49 % | 3.3 % |
+| loads + geometry (counted twice) | 88.7 % | 3.6 % | 17.6 % | 54.3 % |
+
+Max sway 24.71 mm (loads) / 24.66 mm (geometry, columns) / 28.64 mm (whole structure) / 45.68 mm (both; gravity alone gives 3.69 mm). The 0.3–0.5 % between loads and geometry is the difference between the frozen N and the current N. Combining both representations nearly doubles the imperfection effect: the module warns about it (`resolveImperfectionSource`: sway as geometry together with notional/equivalent loads, sway together with bow, sway as loads together with bow as geometry).
+
+**Code routes.** `resolveImperfectionSource({ source: 'IS800' | 'EN1993', … })` refuses (`allowed: false`, with the blocking register items) while any item of that standard is not 'verified', and for EN also while no National Annex is selected or any NDP is unset. Only `source: 'user'` (all values entered by the user) can run today. Which combinations of notional loads and explicit imperfections each code allows is **not** known to the tool and is not assumed.
+
+## 7. Mesh refinement and sensitivity (`results/mesh-sensitivity-study.txt`, Detail 2, CO1)
+
+* Mesh (elements per column / beam): 1/1, 2/1, 4/2, 8/2 give max u_Y 24.695 / 24.706 / 24.714 / 24.714 mm, column M_z 1588.4 / 1588.4 / 1589.9 / 1589.9 kNcm: 4/2 equals 8/2 to < 0.002 %; the coarsest is within 0.1 %. P-δ convergence of a single column (Euler load 0.75 % / 0.05 % / 0.003 % for 2 / 4 / 8 elements) is in section 4.
+* Load steps 1 / 4 / 8 and tighter tolerances (1e-9): identical results (< 1e-4 %); 1 step needs 6 iterations, 4 steps 20, 8 steps 40.
+* Imperfection magnitude φ₀ × 0.9 / 1.1: max u_Y −8.5 % / +8.5 %, column M_z ∓1.0 %, base moment ∓4.9 %, brace N unchanged: sway is nearly proportional to φ₀, so the 1/200 setting must be confirmed per project.
+* Torsional geometric term: no effect on this model. Von Kármán theory: +63 % sway (membrane coupling, not what code-based second-order elastic analysis assumes).
+* α_cr of the factored gravity combination: **2.58** (1 element per member, Sturm count): a strongly second-order structure, which is why the sway is sensitive to small stiffness differences.
+
+## 8. Not done yet
+
+1. **Code provisions.** Implementation of IS 800 (4.3.6, 4.3.6.1, 4.3.6.2, 4.4.3, 4.4.3.1, Annex B) and EN 1993-1-1 (5.2, 5.3) imperfections, conditions of use and design checks needs the **official texts**; the National Annex of the project must be chosen by you. Everything is tracked in `src/shared/codeRegister.ts` / `docs/CODE_REGISTER.md` with status *pending*.
+2. Code-based generation of imperfection values, the α_cr criterion thresholds, member design checks driven by the new solver.
+3. Equivalent bow loads (non-uniform for a sine bow) and the comparison with RSTAB for bow imperfections (the benchmark has sway only).
+4. User interface for the analysis settings, iteration-log display, PDF sections (these depend on the code decisions above).
+5. Performance for web use: the benchmark model (11,500 DOF) solves in ~3 s with one element per member; 29,000 DOF (4/2 elements per column/beam) in ~12 s; 38,600 DOF in ~28 s.
+6. The 1.7 % sway difference and the column lean-direction moment offset against RSTAB (`docs/RSTAB_BENCHMARK.md`, section 5).

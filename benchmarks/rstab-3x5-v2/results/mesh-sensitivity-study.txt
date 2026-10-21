@@ -1,0 +1,20 @@
+Mesh refinement (elements per column / per beam), Theory II, equivalent imperfection loads 1/200 along +Y
+1/1    2856 el  11512 dof  converged  20 it   2.4 s   max uY  24.695 mm   col Mz  1588.35   col My  2074.25 kNcm   base Mx  964.81 kNcm   brace N  121.66 kN   alpha_cr(gravity) 2.577
+2/1    3252 el  13888 dof  converged  20 it   3.1 s   max uY  24.706 mm   col Mz  1588.41   col My  2074.32 kNcm   base Mx  965.25 kNcm   brace N  121.66 kN
+4/2    5792 el  29128 dof  converged  20 it  11.3 s   max uY  24.714 mm   col Mz  1589.91   col My  2074.38 kNcm   base Mx  964.84 kNcm   brace N  121.66 kN
+8/2    7376 el  38632 dof  converged  20 it  28.5 s   max uY  24.714 mm   col Mz  1589.91   col My  2074.39 kNcm   base Mx  964.85 kNcm   brace N  121.66 kN
+relative to the finest mesh:
+1/1   uY -0.078 %   col Mz -0.098 %   col My -0.007 %   base Mx -0.004 %   brace N 0.003 %
+2/1   uY -0.033 %   col Mz -0.094 %   col My -0.003 %   base Mx 0.042 %   brace N 0.002 %
+4/2   uY 0.000 %   col Mz -0.000 %   col My -0.000 %   base Mx -0.001 %   brace N 0.000 %
+8/2   uY 0.000 %   col Mz 0.000 %   col My 0.000 %   base Mx 0.000 %   brace N 0.000 %
+
+Sensitivity at 4/2 elements:
+reference (Theory II, 4 load steps, phi0 = 1/200)    converged  20 it   uY    0.000 %   col Mz    0.000 %   base Mx    0.000 %   brace N    0.000 %
+von Karman theory (membrane coupling)                converged  20 it   uY   62.793 %   col Mz    2.880 %   base Mx   -2.852 %   brace N    0.039 %
+torsional geometric term on                          converged  20 it   uY   -0.000 %   col Mz    0.000 %   base Mx   -0.000 %   brace N    0.000 %
+1 load step                                          converged   6 it   uY    0.000 %   col Mz    0.000 %   base Mx    0.000 %   brace N    0.000 %
+8 load steps                                         converged  40 it   uY    0.000 %   col Mz    0.000 %   base Mx    0.000 %   brace N    0.000 %
+tighter tolerances (1e-9 / 1e-9 / 1e-9)              converged  25 it   uY    0.000 %   col Mz    0.000 %   base Mx    0.000 %   brace N    0.000 %
+phi0 x 0.9                                           converged  20 it   uY   -8.505 %   col Mz   -1.048 %   base Mx   -4.878 %   brace N   -0.000 %
+phi0 x 1.1                                           converged  20 it   uY    8.505 %   col Mz    1.048 %   base Mx    4.877 %   brace N    0.000 %

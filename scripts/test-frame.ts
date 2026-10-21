@@ -3,6 +3,8 @@ import { FrameModel, LoadCase, FMember } from '../src/server/frame/types';
 import { prepare } from '../src/server/frame/model';
 import { solveFrame, criticalLoadFactor } from '../src/server/frame/solve';
 import { Skyline } from '../src/server/frame/skyline';
+import { swayGeometry, bowGeometry, swayLoads, resolveImperfectionSource } from '../src/server/frame/imperfection';
+import { emptyNationalAnnex } from '../src/shared/codeRegister';
 
 let failed = 0;
 const rows: string[] = [];
@@ -267,6 +269,45 @@ const midStation = (res: ReturnType<typeof solveFrame>, member = 1) => {
   const tipB = rb.displacement.get(2)!;
   const mag = Math.hypot(tipB[0], tipB[1], tipB[2]);
   check('inclined member: tip deflection magnitude equals the axis-aligned member', mag, ra.displacement.get(2)![1], 1e-9, 'mm');
+}
+
+// ---------------- 7 imperfection module: explicit geometry vs equivalent loads, no double counting, code routes refused ----------------
+{
+  const L = 3000, div = 8;
+  const col: FrameModel = { nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: L }], materials: mat, sections: sec, members: [{ id: 1, type: 'beam', n1: 1, n2: 2, section: 'S', material: 'S', divisions: div }], supports: [{ node: 1, fixed: F6 }] };
+  const ps = prepare(col);
+  const Pe = (Math.PI ** 2 * E * Iy) / (4 * L * L); // lean along global x = local z of a vertical member: bends about local y
+  const P = 0.5 * Pe, phi0 = 1 / 200, k = Math.sqrt(P / (E * Iy));
+  const axial = lc({ nodal: [{ node: 2, f: [0, 0, -P, 0, 0, 0] }] });
+  const geo = swayGeometry(ps, [[1]], phi0, [1, 0, 0], [0, 0, 1]);
+  const rg = solveFrame({ prepared: ps, combo: [{ lc: axial, factor: 1 }], imperfection: geo.nodal, elementImperfection: geo.elements });
+  assert('sway geometry: converged', rg.converged, rg.message);
+  // a rigid tilt carries a horizontal force phi0*P at the tip: tip deflection (relative to the tilted axis) = phi0 (tan kL - kL)/k
+  check('sway geometry, P = 0.5 Pe: tip displacement  phi0 (tan kL - kL)/k', rg.displacement.get(2)![0], (phi0 * (Math.tan(k * L) - k * L)) / k, 1e-3, 'mm');
+  // equivalent loads: +phi0 N at the top, -phi0 N at the foot (absorbed by the fixed support), N from the first-order analysis
+  const g1 = solveFrame({ prepared: ps, combo: [{ lc: axial, factor: 1 }], options: { secondOrder: false } });
+  const loads = swayLoads(ps, g1, [1], phi0, [1, 0, 0], [0, 0, 1]);
+  assert('equivalent sway loads: one pair of nodal loads at the member ends', loads.length === 2 && Math.abs(loads.find((l) => l.node === 2)!.f[0] - phi0 * P) < 1e-6 * P);
+  const rl = solveFrame({ prepared: ps, combo: [{ lc: axial, factor: 1 }, { lc: lc({ nodal: loads }), factor: 1 }] });
+  check('geometry vs equivalent loads: tip displacement', rg.displacement.get(2)![0], rl.displacement.get(2)![0], 1e-3, 'mm');
+  // double counting: both representations active = twice the effect
+  const rb = solveFrame({ prepared: ps, combo: [{ lc: axial, factor: 1 }, { lc: lc({ nodal: loads }), factor: 1 }], imperfection: geo.nodal, elementImperfection: geo.elements });
+  check('geometry AND equivalent loads together: twice the single effect (double counting)', rb.displacement.get(2)![0] / rg.displacement.get(2)![0], 2, 2e-2);
+  // bow as geometry: the P-delta mid moment of a pinned column
+  const Lb = 3000, pin = [{ node: 1, fixed: [true, true, true, true, false, false] as any }, { node: 2, fixed: [false, true, true, true, false, false] as any }];
+  const psb = prepare(bar(Lb, 8, pin)); const Pcr = (Math.PI ** 2 * E * Iz) / (Lb * Lb), e0 = Lb / 500, Pb = 0.5 * Pcr;
+  const rbow = solveFrame({ prepared: psb, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-Pb, 0, 0, 0, 0, 0] }] }), factor: 1 }], elementImperfection: bowGeometry(psb, [1], e0 / Lb, [0, 1, 0]).elements });
+  const mid = midStation(rbow).find((s) => Math.abs(s[0] - Lb / 2) < 1e-6)!;
+  check('bowGeometry: mid moment  P e0/(1-P/Pcr)  (P = 0.5 Pcr)', Math.abs(mid[6]), (Pb * e0) / 0.5, 3e-3, 'Nmm');
+  // code routes
+  assert('imperfection source "user" is allowed', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' } }).allowed);
+  const is = resolveImperfectionSource({ source: 'IS800' });
+  assert('IS 800 route is refused while the register items are pending', !is.allowed && is.blocked.length > 0, is.blocked.length + ' items');
+  const en = resolveImperfectionSource({ source: 'EN1993' });
+  assert('EN 1993 route is refused without a National Annex', !en.allowed && en.blocked.some((b) => /National Annex/.test(b)));
+  const en2 = resolveImperfectionSource({ source: 'EN1993', annex: emptyNationalAnnex('XX', 'unset') });
+  assert('EN 1993 route is refused while the NDPs of the Annex are unset', !en2.allowed && en2.blocked.some((b) => /not set/.test(b)));
+  assert('double-counting warning: sway + notional loads', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' }, notionalLoadsInLoadCases: true }).warnings.length > 0);
 }
 
 console.log(rows.join('\n'));

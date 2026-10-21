@@ -59,8 +59,8 @@ export const CODE_REGISTER: CodeItem[] = [
     id: 'EN1993-1-1-5.3', standard: 'EN 1993-1-1', edition: 'EN 1993-1-1:2005 + A1:2014', clause: '5.3.2 (global sway), 5.3.3 (member imperfections), 5.3.4',
     requirement: 'Imperfections for global analysis of frames: initial sway, initial bow of members, equivalent horizontal forces, when member imperfections may be omitted.',
     formula: '', parameters: 'φ₀, α_h, α_m, bow amplitudes (Table 5.1): values and NDP status to be read from the text', applicability: '', status: 'pending',
-    implementation: 'The solver can apply stress-free initial imperfections and equivalent loads; NO code-based generation is implemented.',
-    validation: 'RSTAB benchmark uses inclination 1/200 as equivalent loads (an RSTAB setting, not a code verification).', blockedBy: PENDING_TEXT + '; National Annex not selected',
+    implementation: 'Imperfection module (src/server/frame/imperfection.ts): USER-DEFINED sway (equivalent loads or explicit geometry) and bow (geometry). NO code-based values are generated; the EN1993 route refuses to run while this item or the National Annex is unverified.',
+    validation: 'Mechanics only: closed forms and loads = geometry (test:frame), RSTAB benchmark with inclination 1/200 as equivalent loads (an RSTAB setting, not a code verification).', blockedBy: PENDING_TEXT + '; National Annex not selected',
   },
   { id: 'EN1993-1-1-6', standard: 'EN 1993-1-1', edition: 'EN 1993-1-1:2005 + A1:2014', clause: '6.1 (partial factors), 6.2, 6.3 (member buckling, interaction)', requirement: 'Cross-section and member resistance for the EN route.', formula: '', parameters: 'γ_M0, γ_M1, γ_M2 are NDPs', applicability: '', status: 'pending', implementation: 'The existing load-path engine implements EN 1993-1-1/-1-3 checks; they are NOT fed by the new solver.', validation: '', blockedBy: PENDING_TEXT + '; National Annex not selected' },
 ];

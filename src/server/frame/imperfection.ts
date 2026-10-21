@@ -1,0 +1,171 @@
+import { Prepared } from './model';
+import { NodalLoad, SolveResult } from './types';
+import { CODE_REGISTER, NationalAnnex } from '../../shared/codeRegister';
+
+/**
+ * Imperfections for the second-order frame analysis. Two mechanically equivalent representations, which must never be used together for the
+ * same effect (that would count the imperfection twice):
+ *
+ *  – 'geometry': stress-free initial geometry error (nodal displacement + rotation field, global axes), passed as `SolveInput.imperfection`.
+ *    The element formulation carries it only through the geometric term N·G(u+u0): the member is initially crooked, no bending stress.
+ *  – 'loads': equivalent horizontal loads. For a sway (lean) imperfection φ0 the pair ±φ0·N at the ends of every compressed column member.
+ *
+ * The VALUES (φ0, e0/L, which members, which combinations) are user inputs. Code-based values (IS 800, EN 1993-1-1 with a National Annex) are
+ * NOT generated here: see `resolveImperfectionSource`, which refuses a code route while the register items are not verified.
+ */
+
+type V3 = [number, number, number];
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const unit = (a: V3): V3 => { const n = Math.hypot(...a); return n > 0 ? [a[0] / n, a[1] / n, a[2] / n] : [0, 0, 0]; };
+
+/** node indices (internal division nodes included) of a member, in order along the member */
+function memberNodeSequence(ps: Prepared, memberId: number): number[] {
+  const els = (ps.memberElements.get(memberId) ?? []).map((i) => ps.elements[i]).sort((a, b) => a.x0 - b.x0);
+  if (!els.length) return [];
+  return [els[0].n1, ...els.map((e) => e.n2)];
+}
+
+/** Stress-free initial geometry error: a nodal field (translations; global axes) plus per-element local components. Pass both to the solver. */
+export interface GeometricImperfection {
+  /** SolveInput.imperfection */
+  nodal: Float64Array;
+  /** SolveInput.elementImperfection */
+  elements: Map<number, Float64Array>;
+}
+
+const localOf = (R: number[][], v: V3): V3 => [dot(R[0] as V3, v), dot(R[1] as V3, v), dot(R[2] as V3, v)];
+
+/**
+ * Sway (lean) imperfection as initial geometry. `sets` are continuous column lines (member ids; e.g. an RSTAB "set of members"), φ0 the inclination
+ * [-], `direction` a horizontal unit vector, `up` the vertical unit vector pointing upwards.
+ *
+ *  scope 'columns' (default): ONLY the column members are tilted, each element independently, in element-local components: the upper end is
+ *    displaced by φ0·Δh·dir relative to the lower end and both ends rotate by ω = φ0·(up × dir), i.e. a straight tilted element without curvature.
+ *    Through the geometric term this is exactly the equivalent load pair ±φ0·N at the element ends (with the CURRENT N, not a frozen one), the
+ *    imperfection that RSTAB's "inclination on a set of members" represents. Nothing else in the structure is displaced.
+ *  scope 'structure': the whole building leans ("shear building"): every node at height h above the foot is displaced by φ0·h·dir, so floors
+ *    move rigidly; the column elements get the end rotations of a straight tilt. Braces and beams then also see the lean (their chord changes), so
+ *    this is a different imperfection model with different results.
+ */
+export function swayGeometry(ps: Prepared, sets: number[][], phi0: number, direction: V3, up: V3 = [0, 0, 1], scope: 'columns' | 'structure' = 'columns'): GeometricImperfection {
+  const nodal = new Float64Array(ps.nDof), elements = new Map<number, Float64Array>();
+  const d = unit(direction), z = unit(up), w = cross(z, d);
+  const pos = (n: number): V3 => [ps.coords[3 * n], ps.coords[3 * n + 1], ps.coords[3 * n + 2]];
+  const h = (n: number) => dot(pos(n), z);
+  const setNodes = [...new Set(sets.flatMap((set) => set.flatMap((m) => memberNodeSequence(ps, m))))];
+  if (!setNodes.length) return { nodal, elements };
+  if (scope === 'structure') {
+    const foot = h(setNodes.reduce((a, b) => (h(b) < h(a) ? b : a)));
+    for (let n = 0; n < ps.nNodes; n++) for (let k = 0; k < 3; k++) nodal[6 * n + k] = phi0 * Math.max(0, h(n) - foot) * d[k];
+  }
+  for (const set of sets) for (const m of set) for (const ei of ps.memberElements.get(m) ?? []) {
+    const e = ps.elements[ei]; if (e.kind !== 'beam') continue;
+    const wl = localOf(e.R, w), loc = new Float64Array(12);
+    for (let k = 0; k < 3; k++) { loc[3 + k] = phi0 * wl[k]; loc[9 + k] = phi0 * wl[k]; }
+    if (scope === 'columns') { const dl = localOf(e.R, d), dh = h(e.n2) - h(e.n1); for (let k = 0; k < 3; k++) loc[6 + k] = phi0 * dh * dl[k]; }
+    elements.set(ei, loc);
+  }
+  return { nodal, elements };
+}
+
+/**
+ * Bow (member curvature) imperfection as initial geometry: w(x) = e0·sin(πx/L) perpendicular to the member in the direction `direction`
+ * (projected perpendicular to the member axis), e0 = e0OverL·L, given independently for every element of the member in element-local components
+ * (the joints of the member are not touched). Needs at least 4 elements per member for a good sine; slopes are the exact slope of the sine.
+ */
+export function bowGeometry(ps: Prepared, memberIds: number[], e0OverL: number, direction: V3): GeometricImperfection {
+  const nodal = new Float64Array(ps.nDof), elements = new Map<number, Float64Array>();
+  for (const id of memberIds) {
+    const eis = (ps.memberElements.get(id) ?? []).slice().sort((a, b) => ps.elements[a].x0 - ps.elements[b].x0);
+    if (eis.length < 3) continue; // fewer elements cannot carry a bow
+    const last = ps.elements[eis[eis.length - 1]];
+    const L = last.x0 + last.L;
+    const axis: V3 = [ps.elements[eis[0]].R[0][0], ps.elements[eis[0]].R[0][1], ps.elements[eis[0]].R[0][2]];
+    const dir = unit(direction), t = dot(dir, axis);
+    const nPerp = unit([dir[0] - t * axis[0], dir[1] - t * axis[1], dir[2] - t * axis[2]]);
+    if (!nPerp[0] && !nPerp[1] && !nPerp[2]) continue; // direction parallel to the member axis
+    const e0 = e0OverL * L, rotAxis = cross(axis, nPerp);
+    for (const ei of eis) {
+      const e = ps.elements[ei], nl = localOf(e.R, nPerp), wl = localOf(e.R, rotAxis), loc = new Float64Array(12);
+      [[0, e.x0], [6, e.x0 + e.L]].forEach(([o, x]) => {
+        const wv = e0 * Math.sin((Math.PI * x) / L), sl = ((e0 * Math.PI) / L) * Math.cos((Math.PI * x) / L);
+        for (let k = 0; k < 3; k++) { loc[o + k] = wv * nl[k]; loc[o + 3 + k] = sl * wl[k]; }
+      });
+      elements.set(ei, loc);
+    }
+  }
+  return { nodal, elements };
+}
+
+/** Sum of geometric imperfections (nodal fields add, element components add). */
+export function addImperfections(...parts: (GeometricImperfection | null | undefined)[]): GeometricImperfection | null {
+  const f = parts.filter((x): x is GeometricImperfection => !!x);
+  if (!f.length) return null;
+  const nodal = new Float64Array(f[0].nodal.length), elements = new Map<number, Float64Array>();
+  for (const p of f) {
+    for (let i = 0; i < nodal.length; i++) nodal[i] += p.nodal[i];
+    for (const [k, v] of p.elements) { const c = elements.get(k) ?? new Float64Array(v.length); for (let i = 0; i < v.length; i++) c[i] += v[i]; elements.set(k, c); }
+  }
+  return { nodal, elements };
+}
+
+/**
+ * Equivalent horizontal loads of a sway imperfection φ0: every compressed column member (`memberIds`, N from a FIRST-ORDER gravity analysis
+ * `gravity`) gives +φ0·N·dir at its upper node and −φ0·N·dir at its lower node. At a joint where a vertical load is introduced the sum is
+ * φ0 times that load. N is frozen at the first-order value (the geometric imperfection uses the current N: the two differ by the N change).
+ */
+export function swayLoads(ps: Prepared, gravity: SolveResult, memberIds: number[], phi0: number, direction: V3, up: V3 = [0, 0, 1]): NodalLoad[] {
+  const d = unit(direction), z = unit(up);
+  const N = new Map<number, number>();
+  for (const e of gravity.elements) if (!N.has(e.member)) N.set(e.member, e.stations[0][1]); // tension positive
+  const acc = new Map<number, V3>();
+  const add = (node: number, s: number) => { const c = acc.get(node) ?? [0, 0, 0]; acc.set(node, [c[0] + s * d[0], c[1] + s * d[1], c[2] + s * d[2]]); };
+  for (const id of memberIds) {
+    const m = ps.model.members.find((x) => x.id === id); if (!m || m.type !== 'beam') continue;
+    const a = ps.model.nodes.find((n) => n.id === m.n1)!, b = ps.model.nodes.find((n) => n.id === m.n2)!;
+    const comp = -(N.get(id) ?? 0);
+    const topIsB = dot([b.x, b.y, b.z], z) > dot([a.x, a.y, a.z], z);
+    add(topIsB ? m.n2 : m.n1, phi0 * comp); add(topIsB ? m.n1 : m.n2, -phi0 * comp);
+  }
+  return [...acc.entries()].map(([node, v]) => ({ node, f: [v[0], v[1], v[2], 0, 0, 0] }));
+}
+
+export type ImperfectionMode = 'loads' | 'geometry';
+export interface ImperfectionSettings {
+  source: 'user' | 'IS800' | 'EN1993';
+  /** sway: user value φ0 [-] (e.g. 0.005 = 1/200) and the way it is introduced */
+  sway?: { phi0: number; mode: ImperfectionMode };
+  bow?: { e0OverL: number; mode: 'geometry' };
+  /** the same imperfection is ALSO represented by notional / equivalent horizontal loads defined elsewhere (e.g. in a load case) */
+  notionalLoadsInLoadCases?: boolean;
+  /** National Annex of the project (EN route) */
+  annex?: NationalAnnex | null;
+}
+
+export interface ImperfectionCheck {
+  /** false: the settings cannot be used (a code route with unverified provisions) */
+  allowed: boolean;
+  blocked: string[];
+  warnings: string[];
+}
+
+/**
+ * Refuses code-based routes while their provisions are not verified, and warns about double counting. The register is the source of truth:
+ * nothing is "verified" until the official text was supplied and checked (src/shared/codeRegister.ts).
+ */
+export function resolveImperfectionSource(s: ImperfectionSettings): ImperfectionCheck {
+  const blocked: string[] = [], warnings: string[] = [];
+  if (s.source !== 'user') {
+    const std = s.source === 'IS800' ? 'IS 800' : 'EN 1993-1-1';
+    for (const it of CODE_REGISTER) if (it.standard === std && it.status !== 'verified') blocked.push(`${it.id} (${it.clause}): ${it.blockedBy}`);
+    if (s.source === 'EN1993') {
+      if (!s.annex) blocked.push('no National Annex selected');
+      else for (const n of s.annex.ndps) if (n.value === null || n.status !== 'verified') blocked.push(`National Annex ${s.annex.country}: ${n.id} not set / not verified`);
+    }
+  }
+  if (s.sway && s.notionalLoadsInLoadCases) warnings.push('A sway imperfection and notional / equivalent horizontal loads are both active: they represent the same effect and would be counted twice, unless the code permits and requires their combination (a code-route decision, not a universal rule).');
+  if (s.sway && s.bow) warnings.push('Sway and bow imperfections are combined: the combination rules and the values depend on the code and its National Annex; check that the same effect is not counted twice.');
+  if (s.sway && s.sway.mode === 'loads' && s.bow) warnings.push('A sway imperfection as loads is combined with a bow as geometry: the two representations see the member N differently; use one representation or document why mixing is intended.');
+  return { allowed: blocked.length === 0, blocked, warnings };
+}

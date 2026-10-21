@@ -9,9 +9,13 @@ The authoritative data is `src/shared/codeRegister.ts` (so the application can s
 | IS 800:2007 | 4.4.3, 4.4.3.1, Annex B | Second-order elastic analysis; conditions for first-order + amplification | pending | solver mechanics only (Theory II / von Kármán); conditions not applied | official text |
 | IS 800:2007 | member checks | compression/buckling, bending, interaction, effective length, serviceability | pending | not driven by the new solver | official text |
 | EN 1993-1-1 | 5.2.1, 5.2.2 | when second-order effects count (α_cr), second-order elastic analysis | pending | α_cr computable (`criticalLoadFactor`), thresholds not applied | official text, National Annex |
-| EN 1993-1-1 | 5.3.2 – 5.3.4 | global sway, member bow, equivalent forces | pending | solver can apply imperfections; no code generation | official text, National Annex |
+| EN 1993-1-1 | 5.3.2 – 5.3.4 | global sway, member bow, equivalent forces | pending | user-defined sway / bow only (`imperfection.ts`); no code generation; route refused while pending | official text, National Annex |
 | EN 1993-1-1 | 6.1, 6.2, 6.3 | partial factors (NDPs), resistance, buckling, interaction | pending | old engine only | official text, National Annex |
 | National Annex | NDPs | γ_M0, γ_M1, γ_M2, φ₀, bow amplitudes, α_cr limits … | pending | `emptyNationalAnnex()`: all NDPs unset | project decision + text |
+
+## How the register is enforced today
+
+`resolveImperfectionSource` (`src/server/frame/imperfection.ts`) returns `allowed: false` with the blocking items for `source: 'IS800'` or `'EN1993'` while any register item of that standard is not `verified`, and for EN also while no National Annex is selected or an NDP is unset. `source: 'user'` runs with the user's own values and still warns about double counting. This is tested in `npm run test:frame`.
 
 ## National Annex rules applied by the application (when the UI is built)
 
