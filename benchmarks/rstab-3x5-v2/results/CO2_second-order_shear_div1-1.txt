@@ -1,5 +1,5 @@
 lean direction +x
-CO2 second-order, 2856 elements, 11512 dof: converged (20 it, 2.8 s) Converged: 20 iterations in 4 load step(s); maximum 100 per step.
+CO2 second-order, 2856 elements, 11512 dof: converged (20 it, 2.6 s) Converged: 20 iterations in 4 load step(s); maximum 100 per step.
 imperfection loads: 495 nodal loads, total horizontal 376.9 kN
 --- support forces (floor 15.10 kN) and moments (floor 59.75 kNcm)
 P X'     n=    99  max    0.08 %  99%   0.08 %  median   0.000 %  >2%:     0  worst node 801 (mine 5.387, RSTAB 5.370)

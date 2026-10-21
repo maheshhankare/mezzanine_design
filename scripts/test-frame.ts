@@ -221,9 +221,19 @@ const midStation = (res: ReturnType<typeof solveFrame>, member = 1) => {
   for (let i = 0; i < ps.nNodes; i++) { const x = i === 0 ? 0 : i === 1 ? L : (i - 1) * (L / 8); u0[i * 6 + 1] = e0 * Math.sin((Math.PI * x) / L); u0[i * 6 + 5] = ((e0 * Math.PI) / L) * Math.cos((Math.PI * x) / L); }
   const beyond = solveFrame({ prepared: ps, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-1.3 * Pcr, 0, 0, 0, 0, 0] }] }), factor: 1 }], imperfection: u0, options: { steps: 4 } });
   assert('load beyond the critical load is NOT reported as converged', beyond.status !== 'converged', `status ${beyond.status}: ${beyond.message.slice(0, 90)}`);
-  assert('  the result keeps the last converged state apart from the failed trial', beyond.lambdaReached < 1);
+  // Above P_cr the equilibrium reached by Newton is on the unstable branch: it is reported as 'unstable' (negative pivot in the tangent), never as 'converged'.
+  // (Before the moment normalisation was made scale-free this case ended as 'not-converged' at 0.95 P_cr, because of a moment residual that rounding could not
+  // meet, not because of the physics; a failed step still keeps the last converged state apart, see the 2-iteration test below.)
+  assert('  the unstable equilibrium above P_cr is reported as unstable (negative pivot), not as a stable result', beyond.status === 'unstable' && /negative pivot/.test(beyond.message), beyond.message.slice(0, 80));
+  {
+    const near = solveFrame({ prepared: ps, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-0.95 * Pcr, 0, 0, 0, 0, 0] }] }), factor: 1 }], imperfection: u0, options: { steps: 4 } });
+    assert('near instability, P = 0.95 Pcr: converged and stable', near.status === 'converged', near.message.slice(0, 80));
+    const mm = midStation(near).find((s) => Math.abs(s[0] - L / 2) < 1e-6)![6];
+    check('near instability, P = 0.95 Pcr: mid moment P e0/(1 - P/Pcr) (amplification 20)', Math.abs(mm), (0.95 * Pcr * e0) / 0.05, 1e-2, 'Nmm');
+  }
   const cap = solveFrame({ prepared: ps, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-0.9 * Pcr, 0, 0, 0, 0, 0] }] }), factor: 1 }], imperfection: u0, options: { maxIterations: 2, steps: 1, maxSubdivisions: 0, lineSearch: false } });
   assert('iteration limit reached -> not converged, with a clear reason', cap.status === 'not-converged' && /iteration limit/.test(cap.message), cap.message.slice(0, 120));
+  assert('  the failed step keeps the last converged state apart from the failed trial', cap.lambdaReached < 1 && !!cap.failedTrial);
   const clamp = solveFrame({ prepared: ps, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-0.3 * Pcr, 0, 0, 0, 0, 0] }] }), factor: 1 }], imperfection: u0, options: { maxIterations: 500 } });
   assert('maximum iterations is clamped to 100', clamp.options.maxIterations === 100);
   const a = solveFrame({ prepared: ps, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-0.6 * Pcr, 0, 0, 0, 0, 0] }] }), factor: 1 }], imperfection: u0, options: { steps: 1 } });
@@ -299,15 +309,39 @@ const midStation = (res: ReturnType<typeof solveFrame>, member = 1) => {
   const rbow = solveFrame({ prepared: psb, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-Pb, 0, 0, 0, 0, 0] }] }), factor: 1 }], elementImperfection: bowGeometry(psb, [1], e0 / Lb, [0, 1, 0]).elements });
   const mid = midStation(rbow).find((s) => Math.abs(s[0] - Lb / 2) < 1e-6)!;
   check('bowGeometry: mid moment  P e0/(1-P/Pcr)  (P = 0.5 Pcr)', Math.abs(mid[6]), (Pb * e0) / 0.5, 3e-3, 'Nmm');
-  // code routes
-  assert('imperfection source "user" is allowed', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' } }).allowed);
-  const is = resolveImperfectionSource({ source: 'IS800' });
-  assert('IS 800 route is refused while the register items are pending', !is.allowed && is.blocked.length > 0, is.blocked.length + ' items');
-  const en = resolveImperfectionSource({ source: 'EN1993' });
-  assert('EN 1993 route is refused without a National Annex', !en.allowed && en.blocked.some((b) => /National Annex/.test(b)));
-  const en2 = resolveImperfectionSource({ source: 'EN1993', annex: emptyNationalAnnex('XX', 'unset') });
-  assert('EN 1993 route is refused while the NDPs of the Annex are unset', !en2.allowed && en2.blocked.some((b) => /not set/.test(b)));
-  assert('double-counting warning: sway + notional loads', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' }, notionalLoadsInLoadCases: true }).warnings.length > 0);
+  // code routes (the register decides per feature; details in scripts/test-codes.ts)
+  assert('imperfection source "user" is allowed and labelled user-defined', (() => { const r = resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' } }); return r.allowed && r.label === 'user-defined'; })());
+  assert('IS 800: explicit geometric sway is refused (no provision in the code)', !resolveImperfectionSource({ source: 'IS800', sway: { mode: 'geometry' } }).allowed);
+  assert('IS 800: notional / equivalent loads are allowed, provisional (distribution assumption)', (() => { const r = resolveImperfectionSource({ source: 'IS800', sway: { mode: 'loads' } }); return r.allowed && r.label === 'provisional'; })());
+  assert('EN 1993 route is refused without a National Annex', (() => { const r = resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' } }); return !r.allowed && r.blocked.some((x) => /National Annex/.test(x)); })());
+  assert('EN 1993 route is refused while the NDPs of the Annex are unset', !resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' }, annex: emptyNationalAnnex('XX', 'unset') }).allowed);
+  assert('EN 1993 with accepted Eurocode-text values is allowed, labelled provisional', (() => { const r = resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' }, acceptEurocodeTextValues: true }); return r.allowed && r.label === 'provisional'; })());
+  assert('double-counting warning: geometric sway + notional loads', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' }, notionalLoadsInLoadCases: true }).warnings.length > 0);
+}
+
+// ---------------- 8 von Karman vs Theory II: axial shortening of a bent member (the benchmark's 12 mm edge drift) ----------------
+{
+  const L = 5000, q = 5; // N/mm: the sag is deliberately large (about L/50), as in the benchmark secondary beams under factored load
+  const roller = [{ node: 1, fixed: [true, true, true, true, false, false] as any }, { node: 2, fixed: [false, true, true, true, false, false] as any }];
+  const ps = prepare(bar(L, 8, roller));
+  const load = lc({ member: [{ member: 1, q: [0, 0, -q], system: 'global' }] });
+  // closed form: w(x) = q/(24 E I)(x^4 - 2 L x^3 + L^3 x);  integral of w'^2 = (q/24EI)^2 L^7 * 17/35;  shortening of the chord = 1/2 integral of w'^2
+  const k = q / (24 * E * Iy);
+  const shorten = 0.5 * k * k * L ** 7 * (17 / 35);
+  const w0 = (5 * q * L ** 4) / (384 * E * Iy);
+  const vk = solveFrame({ prepared: ps, combo: [{ lc: load, factor: 1 }], options: { theory: 'vonKarman', steps: 4 } });
+  const t2 = solveFrame({ prepared: ps, combo: [{ lc: load, factor: 1 }], options: { theory: 'II', steps: 4 } });
+  assert('von Karman roller beam: converged', vk.converged, vk.message);
+  check(`von Karman: the free end moves in by (1/2) integral w'^2 dx = 17/70 (q/24EI)^2 L^7 (sag ${w0.toFixed(0)} mm = L/${(L / w0).toFixed(0)})`, -vk.displacement.get(2)![0], shorten, 2e-2, 'mm');
+  assert('Theory II: no axial shortening of the bent member (linear strains): the free end stays put', Math.abs(t2.displacement.get(2)![0]) < 1e-6 * shorten, `|u| = ${Math.abs(t2.displacement.get(2)![0]).toExponential(1)} mm`);
+  check('the shortening grows with the SQUARE of the sag: doubling q quadruples it (von Karman)', -solveFrame({ prepared: ps, combo: [{ lc: load, factor: 2 }], options: { theory: 'vonKarman', steps: 4 } }).displacement.get(2)![0] / -vk.displacement.get(2)![0], 4, 3e-2);
+  // restrained ends: von Karman builds a membrane tension, Theory II does not
+  const pinned = [{ node: 1, fixed: [true, true, true, true, false, false] as any }, { node: 2, fixed: [true, true, true, true, false, false] as any }];
+  const psr = prepare(bar(L, 8, pinned));
+  const vkr = solveFrame({ prepared: psr, combo: [{ lc: load, factor: 1 }], options: { theory: 'vonKarman', steps: 4 } });
+  const t2r = solveFrame({ prepared: psr, combo: [{ lc: load, factor: 1 }], options: { theory: 'II', steps: 4 } });
+  const Nvk = vkr.elements.filter((e) => e.member === 1).flatMap((e) => e.stations)[0][1], Nt2 = t2r.elements.filter((e) => e.member === 1).flatMap((e) => e.stations)[0][1];
+  assert('axially restrained beam: von Karman develops a membrane tension, Theory II none', Nvk > 1e3 && Math.abs(Nt2) < 1, `N = ${Nvk.toFixed(0)} N (von Karman), ${Nt2.toFixed(3)} N (Theory II)`);
 }
 
 console.log(rows.join('\n'));

@@ -1,5 +1,5 @@
 lean direction +y
-CO1 second-order, 5792 elements, 29128 dof: converged (20 it, 12.2 s) Converged: 20 iterations in 4 load step(s); maximum 100 per step.
+CO1 second-order, 5792 elements, 29128 dof: converged (20 it, 12.9 s) Converged: 20 iterations in 4 load step(s); maximum 100 per step.
 imperfection loads: 495 nodal loads, total horizontal 376.9 kN
 --- support forces (floor 15.08 kN) and moments (floor 48.25 kNcm)
 P X'     n=    99  max    0.00 %  99%   0.00 %  median   0.000 %  >2%:     0  worst node 1 (mine -2.458, RSTAB -2.460)
@@ -29,3 +29,10 @@ Vz       n=  4752  max    0.05 %  99%   0.05 %  median   0.000 %  >2%:     0  wo
 T        n=  4752  max    0.00 %  99%   0.00 %  median   0.000 %  >2%:     0  worst mbr 1 Max N x=4000 (mine 0.000, RSTAB 0.000)
 My       n=  4752  max    0.12 %  99%   0.09 %  median   0.004 %  >2%:     0  worst mbr 22 Min V z x=1600 (mine -4.893, RSTAB -4.760)
 Mz       n=  4752  max    4.18 %  99%   3.69 %  median   0.375 %  >2%:   699  worst mbr 2735 Min V z x=1800 (mine -32.627, RSTAB -28.290)
+significance beams and braces My: 1748 members; difference > 1 % of the member's own governing value: 11, > 2 %: 0; among members with a governing moment >= 100 kNcm (1748): worst 1.47 % (member 1619, difference 8.44 kNcm of 575.4 kNcm)
+significance beams and braces Mz: 1748 members; difference > 1 % of the member's own governing value: 540, > 2 %: 498; among members with a governing moment >= 100 kNcm (0): worst n/a
+significance columns My: 396 members; difference > 1 % of the member's own governing value: 0, > 2 %: 0; among members with a governing moment >= 100 kNcm (140): worst 0.03 % (member 1323, difference 0.05 kNcm of 133.5 kNcm)
+significance columns Mz: 396 members; difference > 1 % of the member's own governing value: 161, > 2 %: 26; among members with a governing moment >= 100 kNcm (366): worst 3.86 % (member 2222, difference 3.93 kNcm of 101.9 kNcm)
+rotation phi X: 1567 nodes; difference > 1 print unit (0.1 mrad): 162; > 2 print units: 0; largest difference 0.14 mrad of a largest rotation 10.2 mrad
+rotation phi Y: 1567 nodes; difference > 1 print unit (0.1 mrad): 29; > 2 print units: 0; largest difference 0.19 mrad of a largest rotation 11.4 mrad
+rotation phi Z: 1567 nodes; difference > 1 print unit (0.1 mrad): 48; > 2 print units: 0; largest difference 0.18 mrad of a largest rotation 5.6 mrad

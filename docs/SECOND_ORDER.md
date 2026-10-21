@@ -1,6 +1,6 @@
 # Second-order frame analysis (new analysis mode)
 
-Status: **solver core implemented and verified against closed-form solutions (61 checks), validated against the RSTAB benchmark (first and second order, 2,924 members; both the Detail 1 and the current Detail 2 model) within the 2 % target except one result type with a documented, unexplained small offset; see `docs/RSTAB_BENCHMARK.md`.** Explicit geometric imperfections (sway, bow) and equivalent sway loads are implemented (`src/server/frame/imperfection.ts`) and checked against each other. Not yet connected to the user interface. EN 1993 / IS 800 imperfection values, National Annex selection and design checks are **not implemented**: the official code texts have not been supplied (`docs/CODE_REGISTER.md`); the code routes of the imperfection module refuse to run while the register items are unverified. Nothing in the existing load-path model was changed; the new code lives in `src/server/frame/` and is not imported by the application yet.
+Status: **solver core implemented and verified against closed-form solutions (71 checks, `npm run test:frame`), validated against the RSTAB benchmark (first and second order, 2,924 members; Detail 1 and the current Detail 2 model) within the 2 % target except one result type with a documented, unexplained small offset (`docs/RSTAB_BENCHMARK.md`).** Explicit geometric imperfections, equivalent loads, the IS 800 and EN 1993-1-1 analysis provisions that could be verified in the supplied official texts, the analysis settings and the calculation record are implemented (sections 6-9) and tested (`npm run test:codes`, 113 checks). **Not implemented: member design checks (IS 800 Sections 7-9, EN 1993-1-1 Section 6), the IS 800 amplification factor, EN 5.3.2(5), (10), (11), 5.3.3; no National Annex was supplied, so EN NDP values are provisional at best.** The solver is not yet connected to the application's project model.
 
 ## 1. Why a new solver
 
@@ -45,7 +45,7 @@ Newton–Raphson with the full tangent, per load step (default 4 increments; a f
 * A failed step keeps the last converged state separate from the failed trial (`failedTrial`); the status is `not-converged` with the reason; every attempt and iteration (residuals, maximum correction, energy) is logged.
 * Convergence and code compliance are separate: a converged analysis says nothing about safety.
 
-## 4. Verification performed (`npm run test:frame`, 61 checks, all passed; the last 11 are the imperfection checks of section 6)
+## 4. Verification performed (`npm run test:frame`, 71 checks, all passed; the later ones are the imperfection checks of section 6 and the convergence / von Kármán checks of section 8)
 
 Closed-form references only (these do **not** involve RSTAB):
 
@@ -112,11 +112,25 @@ Max sway 24.71 mm (loads) / 24.66 mm (geometry, columns) / 28.64 mm (whole struc
 * Torsional geometric term: no effect on this model. Von Kármán theory: +63 % sway (membrane coupling, not what code-based second-order elastic analysis assumes).
 * α_cr of the factored gravity combination: **2.58** (1 element per member, Sturm count): a strongly second-order structure, which is why the sway is sensitive to small stiffness differences.
 
-## 8. Not done yet
+## 8. Convergence criterion, near instability, von Kármán vs Theory II
 
-1. **Code provisions.** Implementation of IS 800 (4.3.6, 4.3.6.1, 4.3.6.2, 4.4.3, 4.4.3.1, Annex B) and EN 1993-1-1 (5.2, 5.3) imperfections, conditions of use and design checks needs the **official texts**; the National Annex of the project must be chosen by you. Everything is tracked in `src/shared/codeRegister.ts` / `docs/CODE_REGISTER.md` with status *pending*.
-2. Code-based generation of imperfection values, the α_cr criterion thresholds, member design checks driven by the new solver.
-3. Equivalent bow loads (non-uniform for a sine bow) and the comparison with RSTAB for bow imperfections (the benchmark has sway only).
-4. User interface for the analysis settings, iteration-log display, PDF sections (these depend on the code decisions above).
-5. Performance for web use: the benchmark model (11,500 DOF) solves in ~3 s with one element per member; 29,000 DOF (4/2 elements per column/beam) in ~12 s; 38,600 DOF in ~28 s.
-6. The 1.7 % sway difference and the column lean-direction moment offset against RSTAB (`docs/RSTAB_BENCHMARK.md`, section 5).
+* **Moment residual normalisation (corrected).** The moment residual was normalised by max(‖applied moments‖, 1 N·mm). With no applied moments the floor of 1 N·mm has no physical scale and rounding exceeded it in a stiff model (portal with a beam 1e4 times stiffer than the columns: 759 iterations, never converged although the correction was 1e-14). It is now normalised by max(‖applied moments‖, 1 N·mm, ‖applied forces‖ × mean element length): moments and forces are judged by the same relative criterion; the criteria themselves (1e-6, 1e-6, 1e-6, 1e-10) are unchanged. See `docs/RSTAB_BENCHMARK.md` section 5.4.
+* **Near instability.** A pinned column with a half-sine bow at P = 0.95 P_cr converges (16 iterations, 4 load steps) and its mid moment equals P e0/(1 − P/P_cr) to 0.06 % (amplification 20). Above P_cr (1.3 P_cr) Newton ends on the unstable branch and the status is `unstable` (negative pivot in the tangent), never `converged`. A failed step (iteration limit) keeps the last converged state apart from the failed trial. These are in `npm run test:frame`.
+* **Von Kármán vs Theory II.** Von Kármán adds the axial shortening ½∫w′²dx of a bent member (membrane coupling); Theory II does not. Test: a roller-supported beam shortens by 17/70 (q/24EI)²L⁷ in von Kármán (0.007 %) and not at all in Theory II; the shortening is proportional to the square of the load; a restrained beam develops a membrane tension in von Kármán only. This explains the 12 mm edge drift of the benchmark (`docs/RSTAB_BENCHMARK.md` section 5.1). Theory II is the default and the code-type second-order elastic analysis.
+
+## 9. Code routes, analysis settings, calculation record
+
+* **Routes** (`src/server/frame/codes/is800.ts`, `en1993.ts`): IS 800 notional forces (4.3.6, .1, .2, .3), the 1.4 amplification-factor decision (4.4.2), the deflection-method λcr (B-3.2), the foundation shear without the notional force; EN 1993-1-1 α_cr (5.1), (5.2), (5.3), amplification (5.4), φ = φ0 α_h α_m (5.5), Table 5.1, (5.7), (5.8), the equivalent bow forces of Figure 5.4. Independent of each other. Clause-level status: `docs/CODE_REGISTER.md`; explanation and the notional-load / explicit-imperfection question: `docs/IS800_EN1993_ROUTES.md`.
+* **What the tests show** (`npm run test:codes`, 113 checks): every equation against hand values; the IS 800 deflection method gives 12EI/(PL²) on a rigid-beam portal while the rational analysis gives π²EI/(PL²) (ratio 12/π² = 1.216: the deflection method is an estimate and is labelled as such); EN (5.2) gives the same 12EI/(PL²); the equivalent bow loads give the closed-form beam-column moment (q/k²)(sec(kL/2) − 1) to 1e-4 and differ from the half-sine geometry by the shape (parabola vs sine, 1.5 %); the foundation shear excludes the notional force.
+* **Settings** (`src/shared/analysisSettings.ts`, panel `src/components/AnalysisSettingsPanel.tsx`, page `/analysis`): standard, National Annex (none can be selected: not supplied), order, theory, shear deformation, stiffness factors, stability method (EN), sway and bow with source (code / user-defined) and representation (loads / geometry), what else acts in the combination, member checks. `validateSettings` refuses: out-of-range values, the notional force with wind / earthquake / temperature / overturning (IS 800 4.3.6.2), a code geometric imperfection under IS 800 (the code has none), EN code values without a National Annex or accepted Eurocode-text values, geometry together with imperfection loads in the load cases (double counting), member checks (pending). The result label is never "verified": member design is pending for both standards. The panel was checked in the browser (IS 800 notional + wind → refused with the clause; EN without Annex → refused; options disabled with the register reason).
+* **Calculation record** (`src/server/frame/record.ts`): the 15 sections required for traceability (project, standard, edition and Annex, assumptions, formulation, load cases, sections and materials, supports and stiffness factors, imperfections with source and representation, results, member checks, stability, RSTAB comparison, convergence evidence, register status, warnings), a result label, and the statement that a converged analysis is not proof of code compliance; `governingMoment` implements IS 800 B-2.2(a). It is not yet connected to the PDF report of the application.
+
+## 10. Not done yet
+
+1. **Member design** for both standards (IS 800 Sections 7-9, EN 1993-1-1 Section 6): not read on the page images, not implemented. Without it no result can be called code compliant.
+2. **IS 800 amplification factor** (4.4.2 / 4.4.3.3 with 9.3.2.2 and Table 18): interpretation open.
+3. **EN 1993-1-1** 5.3.2(5), (10), (11), 5.3.3, 5.3.4(3) k·e0 (needs a warping DOF); every NDP value needs the National Annex of the project (not supplied).
+4. Equivalent bow loads are implemented for the parabola of Figure 5.4; the comparison with RSTAB for bow imperfections is not possible with the supplied model (sway only).
+5. The analysis settings and the record are not yet wired to the solver run of a project: the frame analysis is still a separate module (a project-level frame model and a run endpoint are not built).
+6. The 1.7 % sway difference and the column lean-direction offset against RSTAB (`docs/RSTAB_BENCHMARK.md` section 5.2).
+7. Performance for web use: 11,500 DOF in ~3 s, 29,000 DOF in ~12 s, 38,600 DOF in ~30 s.

@@ -1,6 +1,6 @@
 import { Prepared } from './model';
 import { NodalLoad, SolveResult } from './types';
-import { CODE_REGISTER, NationalAnnex } from '../../shared/codeRegister';
+import { routeAvailability, type CodeFeature, type NationalAnnex } from '../../shared/codeRegister';
 
 /**
  * Imperfections for the second-order frame analysis. Two mechanically equivalent representations, which must never be used together for the
@@ -134,38 +134,59 @@ export function swayLoads(ps: Prepared, gravity: SolveResult, memberIds: number[
 export type ImperfectionMode = 'loads' | 'geometry';
 export interface ImperfectionSettings {
   source: 'user' | 'IS800' | 'EN1993';
-  /** sway: user value φ0 [-] (e.g. 0.005 = 1/200) and the way it is introduced */
-  sway?: { phi0: number; mode: ImperfectionMode };
-  bow?: { e0OverL: number; mode: 'geometry' };
+  /** sway: user value φ0 [-] (e.g. 0.005 = 1/200) and the way it is introduced ('loads' = notional / equivalent forces) */
+  sway?: { phi0?: number; mode: ImperfectionMode };
+  bow?: { e0OverL?: number; mode: ImperfectionMode };
   /** the same imperfection is ALSO represented by notional / equivalent horizontal loads defined elsewhere (e.g. in a load case) */
   notionalLoadsInLoadCases?: boolean;
   /** National Annex of the project (EN route) */
   annex?: NationalAnnex | null;
+  /** EN route without a verified Annex: accept the values printed in the Eurocode text (the run is then provisional) */
+  acceptEurocodeTextValues?: boolean;
 }
 
 export interface ImperfectionCheck {
-  /** false: the settings cannot be used (a code route with unverified provisions) */
+  /** false: the settings cannot be used (a code route whose provisions are pending, or a method the code does not provide) */
   allowed: boolean;
+  /** how the result must be labelled */
+  label: 'verified' | 'provisional' | 'user-defined' | 'blocked';
   blocked: string[];
   warnings: string[];
 }
 
 /**
- * Refuses code-based routes while their provisions are not verified, and warns about double counting. The register is the source of truth:
- * nothing is "verified" until the official text was supplied and checked (src/shared/codeRegister.ts).
+ * Decides, per feature, whether the requested imperfections can be produced under the chosen standard. Only the affected route is blocked; the
+ * register (src/shared/codeRegister.ts) is the source of truth. Code values are never invented: IS 800 has no explicit geometric imperfection
+ * provisions in the frame analysis (only the notional forces of 4.3.6); EN 1993-1-1 values are National choices, so without a verified Annex they are
+ * available only as provisional Eurocode-text values the user has accepted.
  */
 export function resolveImperfectionSource(s: ImperfectionSettings): ImperfectionCheck {
   const blocked: string[] = [], warnings: string[] = [];
-  if (s.source !== 'user') {
-    const std = s.source === 'IS800' ? 'IS 800' : 'EN 1993-1-1';
-    for (const it of CODE_REGISTER) if (it.standard === std && it.status !== 'verified') blocked.push(`${it.id} (${it.clause}): ${it.blockedBy}`);
-    if (s.source === 'EN1993') {
-      if (!s.annex) blocked.push('no National Annex selected');
-      else for (const n of s.annex.ndps) if (n.value === null || n.status !== 'verified') blocked.push(`National Annex ${s.annex.country}: ${n.id} not set / not verified`);
+  let label: ImperfectionCheck['label'] = s.source === 'user' ? 'user-defined' : 'verified';
+  const need = (f: CodeFeature) => {
+    const a = routeAvailability(f);
+    if (a.state === 'blocked') blocked.push(...a.reasons);
+    else if (a.state === 'provisional' && label === 'verified') { label = 'provisional'; warnings.push(...a.reasons.map((r) => `provisional: ${r}`)); }
+  };
+  if (s.source === 'IS800') {
+    if (s.sway) {
+      if (s.sway.mode === 'geometry') blocked.push('IS 800 gives no provisions for an explicit geometric sway imperfection in the frame analysis (4.3.6, 4.4.3, Annex B-2 checked); use the notional forces of 4.3.6 or mark the imperfection user-defined.');
+      else need('is800.notional-loads');
     }
+    if (s.bow) blocked.push('IS 800 gives no member-bow imperfection value for the frame analysis (member bow enters through the buckling curves of Section 7); mark it user-defined.');
   }
-  if (s.sway && s.notionalLoadsInLoadCases) warnings.push('A sway imperfection and notional / equivalent horizontal loads are both active: they represent the same effect and would be counted twice, unless the code permits and requires their combination (a code-route decision, not a universal rule).');
-  if (s.sway && s.bow) warnings.push('Sway and bow imperfections are combined: the combination rules and the values depend on the code and its National Annex; check that the same effect is not counted twice.');
-  if (s.sway && s.sway.mode === 'loads' && s.bow) warnings.push('A sway imperfection as loads is combined with a bow as geometry: the two representations see the member N differently; use one representation or document why mixing is intended.');
-  return { allowed: blocked.length === 0, blocked, warnings };
+  if (s.source === 'EN1993') {
+    const annexOk = !!s.annex && s.annex.ndps.length > 0 && s.annex.ndps.every((n) => n.value !== null && n.status === 'verified');
+    if (!annexOk && !s.acceptEurocodeTextValues) blocked.push(s.annex ? `National Annex ${s.annex.country}: NDPs are not all set and verified` : 'no National Annex selected: the EN 1993-1-1 imperfection values are National choices (none is assumed)');
+    else if (!annexOk && label === 'verified') { label = 'provisional'; warnings.push('values printed in the Eurocode text are used (φ0 = 1/200, Table 5.1): provisional until the National Annex of the project is verified'); }
+    if (s.sway) { need('en.sway-imperfection'); if (s.sway.mode === 'loads') need('en.equivalent-forces'); }
+    if (s.bow) need('en.bow-imperfection');
+  }
+  if (s.sway && s.notionalLoadsInLoadCases && s.sway.mode === 'geometry') warnings.push('A geometric sway imperfection and notional / equivalent horizontal loads in the load cases both represent the same effect: they would be counted twice.');
+  if (s.sway && s.sway.mode === 'loads' && s.notionalLoadsInLoadCases) warnings.push('Equivalent sway loads are generated here and notional loads are also in the load cases: the same imperfection would be applied twice.');
+  if (s.source === 'IS800' && s.sway && s.sway.mode === 'geometry') warnings.push('In the IS 800 route a geometric imperfection combined with the notional forces counts the practical imperfections twice.');
+  if (s.source === 'EN1993' && s.sway && s.bow) warnings.push('EN 1993-1-1 5.3.2(6): bow is introduced in addition to sway only for frames sensitive to second-order effects and members meeting (5.8); check en1993BowRequired.');
+  if (s.sway && s.bow && s.sway.mode === 'loads' && s.bow.mode === 'geometry') warnings.push('Sway as loads with bow as geometry: the two representations see the member N differently (frozen vs current); use one representation or document why mixing is intended.');
+  if (blocked.length) label = 'blocked';
+  return { allowed: blocked.length === 0, label, blocked, warnings };
 }

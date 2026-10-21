@@ -38,7 +38,7 @@ if (co === 'CO2' || V2) {
   if (IMPMODE !== 'geometry') combo.push({ lc: imp.lc, factor: 1.0 });
   if (IMPMODE !== 'loads') { const sets: { members: number[] }[] = JSON.parse(readFileSync(BENCH + '/sets.json', 'utf8')); const geo = swayGeometry(ps, sets.map((x) => x.members), 1 / 200, dirV, [0, 0, -1], process.env.SCOPE === 'structure' ? 'structure' : 'columns'); imperfection = geo.nodal; elementImperfection = geo.elements; console.log(`imperfection mode ${IMPMODE}: explicit lean of ${sets.length} column sets`); if (IMPMODE === 'both') console.log('WARNING: equivalent loads AND geometric lean: the imperfection is counted twice'); }
 }
-const res = solveFrame({ prepared: ps, combo, imperfection, elementImperfection, options: { secondOrder: mode === 'second', torsionGeometric: !!process.env.TORS } });
+const res = solveFrame({ prepared: ps, combo, imperfection, elementImperfection, options: { secondOrder: mode === 'second', torsionGeometric: !!process.env.TORS, theory: process.env.THEORY === 'vonKarman' ? 'vonKarman' : 'II' } });
 console.log(`${co} ${mode}-order, ${ps.elements.length} elements, ${ps.nFree} dof: ${res.status} (${res.totalIterations} it, ${((Date.now() - t0) / 1000).toFixed(1)} s) ${res.message}`);
 if (imp) console.log(`imperfection loads: ${imp.nLoads} nodal loads, total horizontal ${(imp.total / 1000).toFixed(1)} kN`);
 if (!res.converged) process.exit(1);
@@ -153,4 +153,47 @@ if (process.env.DUMPCOL) {
     for (const r of rows) { const el = els.find((e) => r.x >= e.x0! - 1e-6 && r.x <= e.x0! + e.L! + 1e-6) ?? els[els.length - 1]; const f = sectionForcesAt(el, r.x - el.x0!, deformedShear); out.push({ mid: +mid, len: m.length, x: r.x, ref: [r.N, r.Vy, r.Vz, r.T, r.My, r.Mz], mine: f.map((v, k) => v / scale[k]) }); }
   }
   writeFileSync(process.env.DUMPCOL, JSON.stringify(out));
+}
+
+// ---- DRIFT=1: nodes whose displacement differs most from RSTAB (to locate and explain a deviation), with the member types at the node
+if (process.env.DRIFT) {
+  const worst: { id: number; k: number; mine: number; ref: number; d: number }[] = [];
+  for (const [id, byCo] of Object.entries(def)) { const ref = byCo[co]; const mine = res.displacement.get(+id); if (!ref || !mine) continue; for (let k = 0; k < 3; k++) worst.push({ id: +id, k, mine: mine[k], ref: ref[k], d: Math.abs(mine[k] - ref[k]) }); }
+  worst.sort((a, b) => b.d - a.d);
+  const at = new Map<number, string[]>();
+  for (const m of members) for (const n of [m.n1, m.n2]) (at.get(n) ?? at.set(n, []).get(n)!).push(`${m.id}:${m.type === 'truss' ? 'brace' : m.dir}/s${m.sec1}`);
+  for (const w of worst.slice(0, +process.env.DRIFT)) { const nd = nodeMap.get(w.id)!; console.log(`node ${w.id} (${nd.x}, ${nd.y}, ${nd.z}) u${'XYZ'[w.k]} mine ${w.mine.toFixed(2)} RSTAB ${w.ref.toFixed(2)} diff ${w.d.toFixed(2)} mm   members ${(at.get(w.id) ?? []).slice(0, 6).join(' ')}`); }
+}
+
+// ---- SIGNIF=1: engineering significance of the differences. Per member: the largest |mine - RSTAB| of a component against the governing (largest) value
+// of that component in the member, and the same for the rotations in print units. A moment difference that is a small fraction of the member's governing
+// moment changes a combined utilisation by at most about that fraction times the moment's share of the utilisation.
+if (process.env.SIGNIF) {
+  const comp = ['N', 'Vy', 'Vz', 'T', 'My', 'Mz'];
+  for (const [title, isCol] of [['beams and braces', false], ['columns', true]] as const) {
+    for (const k of [4, 5]) {
+      const rel: { id: number; r: number; d: number; gov: number }[] = [];
+      for (const [mid, byCo] of Object.entries(forces)) {
+        const m = mInfo.get(+mid)!; if ((m.dir === 'Z') !== isCol || m.type !== 'beam') continue;
+        const rows = byCo[co]; const els = (byMember.get(+mid) || []).sort((a, b) => a.x0! - b.x0!); if (!rows || !els.length) continue;
+        let gov = 0, dmax = 0;
+        for (const r of rows) { const ref = [r.N, r.Vy, r.Vz, r.T, r.My, r.Mz][k]; if (!Number.isFinite(ref)) continue; const el = els.find((e) => r.x >= e.x0! - 1e-6 && r.x <= e.x0! + e.L! + 1e-6) ?? els[els.length - 1]; const mine = sectionForcesAt(el, r.x - el.x0!, deformedShear)[k] / scale[k]; gov = Math.max(gov, Math.abs(ref)); dmax = Math.max(dmax, Math.max(0, Math.abs(mine - ref) - 0.005)); }
+        rel.push({ id: +mid, r: dmax / Math.max(gov, 1), d: dmax, gov });
+      }
+      rel.sort((a, b) => b.r - a.r);
+      const over1 = rel.filter((x) => x.r > 0.01).length, over2 = rel.filter((x) => x.r > 0.02).length;
+      const lim = rel.filter((x) => x.gov >= 100); // members that carry a moment of at least 100 kNcm (1 kNm) are the ones a design check can govern
+      const big = lim.filter((x) => x.gov >= 500).sort((a, b) => b.r - a.r)[0]; // members carrying 5 kNm or more
+      const worst = lim.sort((a, b) => b.r - a.r)[0];
+      console.log(`significance ${title} ${comp[k]}: ${rel.length} members; difference > 1 % of the member's own governing value: ${over1}, > 2 %: ${over2}; among members with a governing moment >= 100 kNcm (${lim.length}): worst ${worst ? `${(worst.r * 100).toFixed(2)} % (member ${worst.id}, difference ${worst.d.toFixed(2)} kNcm of ${worst.gov.toFixed(1)} kNcm)` : 'n/a'}; among those >= 500 kNcm: ${big ? `worst ${(big.r * 100).toFixed(2)} % (member ${big.id}, ${big.d.toFixed(2)} of ${big.gov.toFixed(0)} kNcm)` : 'none'}`);
+    }
+  }
+  // rotations
+  for (const k of [3, 4, 5]) {
+    const ds: { id: number; d: number; mine: number; ref: number }[] = [];
+    for (const [id, byCo] of Object.entries(def)) { const ref = byCo[co]; const mine = res.displacement.get(+id); if (!ref || !mine || !rotDefined(+id, k)) continue; ds.push({ id: +id, d: Math.abs(mine[k] * 1000 - ref[k]), mine: mine[k] * 1000, ref: ref[k] }); }
+    const n1 = ds.filter((x) => x.d > 0.1 + 1e-9).length, n2 = ds.filter((x) => x.d > 0.2 + 1e-9).length;
+    const maxRef = Math.max(...ds.map((x) => Math.abs(x.ref)));
+    console.log(`rotation ${['phi X', 'phi Y', 'phi Z'][k - 3]}: ${ds.length} nodes; difference > 1 print unit (0.1 mrad): ${n1}; > 2 print units: ${n2}; largest difference ${Math.max(...ds.map((x) => x.d)).toFixed(2)} mrad of a largest rotation ${maxRef.toFixed(1)} mrad`);
+  }
 }

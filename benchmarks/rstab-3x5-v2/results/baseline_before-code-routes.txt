@@ -1,0 +1,44 @@
+Baseline before the code-provision work: commit aeca419, 2026-10-21
+
+== npm run test:frame (tail)
+ok   double-counting warning: sway + notional loads
+
+all 61 checks passed
+
+== npm run test:rstab
+ok   CO1 support      P X'  max   0.00 %   bound 0.5 %
+ok   CO1 support      P Y'  max   0.07 %   bound 0.5 %
+ok   CO1 support      P Z'  max   0.04 %   bound 0.5 %
+ok   CO1 support      M X'  max   1.28 %   bound 3 %
+ok   CO1 support      M Y'  max   0.21 %   bound 3 %
+ok   CO1 displacement u X   max   0.04 %   bound 2.5 %
+ok   CO1 displacement u Y   max   1.65 %   bound 2.5 %
+ok   CO1 displacement u Z   max   1.66 %   bound 2.5 %
+ok   CO1 beams        N     max   0.76 %   bound 1.2 %
+ok   CO1 beams        Vz    max   1.55 %   bound 2.5 %
+ok   CO1 beams        My    max   3.99 %   bound 4.5 %
+ok   CO1 beams        Mz    max   0.25 %   bound 0.8 %
+ok   CO1 columns      N     max   0.48 %   bound 0.8 %
+ok   CO1 columns      Vy    max   0.62 %   bound 1 %
+ok   CO1 columns      Vz    max   0.05 %   bound 1 %
+ok   CO1 columns      My    max   0.31 %   bound 3.5 %
+ok   CO1 columns      Mz    max   4.15 %   bound 5 %
+ok   CO2 support      P X'  max   0.08 %   bound 0.5 %
+ok   CO2 support      P Y'  max   0.00 %   bound 0.5 %
+ok   CO2 support      P Z'  max   0.05 %   bound 0.5 %
+ok   CO2 support      M X'  max   0.29 %   bound 3 %
+ok   CO2 support      M Y'  max   0.73 %   bound 3 %
+ok   CO2 displacement u X   max   1.04 %   bound 2.5 %
+ok   CO2 displacement u Y   max   0.00 %   bound 2.5 %
+ok   CO2 displacement u Z   max   0.38 %   bound 2.5 %
+ok   CO2 beams        N     max   0.41 %   bound 1.2 %
+ok   CO2 beams        Vz    max   1.87 %   bound 2.5 %
+ok   CO2 beams        My    max   1.76 %   bound 4.5 %
+ok   CO2 beams        Mz    max   0.14 %   bound 0.8 %
+ok   CO2 columns      N     max   0.44 %   bound 0.8 %
+ok   CO2 columns      Vy    max   0.07 %   bound 1 %
+ok   CO2 columns      Vz    max   0.51 %   bound 1 %
+ok   CO2 columns      My    max   2.95 %   bound 3.5 %
+ok   CO2 columns      Mz    max   0.79 %   bound 5 %
+
+RSTAB regression: all bounds met

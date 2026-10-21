@@ -148,6 +148,13 @@ export function solveFrame(input: SolveInput): SolveResult {
     for (let p = 0; p < nFree; p++) { const d = ps.freeDof[p]; if (ps.dofKind[d] === kind) s += (lam * P[d]) ** 2; }
     return Math.sqrt(s);
   };
+  /**
+   * Normalisation of the moment residual. With no applied moments the old normalisation was the absolute floor of 1 N·mm, a number that depends on the
+   * unit system and that rounding error exceeds in a stiff model (a beam 1e4 times stiffer than the columns left 2e-5 N·mm and never converged). The moment
+   * residual is now measured like the force residual: against ‖applied forces‖ × mean element length, i.e. the moment of the force-residual tolerance
+   * acting at one element length. Moments and forces are thereby judged by the same relative criterion; the criteria (1e-6 ...) are unchanged.
+   */
+  const meanLength = ps.elements.reduce((s, e) => s + e.L, 0) / Math.max(1, ps.elements.length);
   const dot = (a: Float64Array, b: Float64Array) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
   let totalIters = 0;
@@ -166,7 +173,7 @@ export function solveFrame(input: SolveInput): SolveResult {
     for (let it = 0; it <= opt.maxIterations; it++) {
       totalIters++;
       const resF = nrm(R, 0) / Math.max(extNorm(lam, 0), opt.forceFloor);
-      const resM = nrm(R, 1) / Math.max(extNorm(lam, 1), opt.momentFloor);
+      const resM = nrm(R, 1) / Math.max(extNorm(lam, 1), opt.momentFloor, meanLength * extNorm(lam, 0));
       const rec: IterationRecord = { step: stepIndex, lambda: lam, iter: it, resForce: resF, resMoment: resM, maxDu: 0, energy: 0, converged: false };
       if (!Number.isFinite(resF) || !Number.isFinite(resM)) { iterations.push({ ...rec, note: 'non-finite residual' }); return { ok: false, u, iters: it, reason: 'non-finite residual (diverged)', neg }; }
       const resOK = resF <= opt.tolForce && resM <= opt.tolMoment;
