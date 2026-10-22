@@ -49,6 +49,9 @@ export function solveFrame(input: SolveInput): SolveResult {
   const { P, feq, qLocal } = buildLoads(ps, input.combo);
   const nDof = ps.nDof, nFree = ps.nFree;
   const so = opt.secondOrder;
+  // first order with tension-only members: the tangent depends on which members are active, so it is re-assembled and re-factorised at every iteration (piecewise linear problem);
+  // otherwise the stiffness of a first-order analysis is constant and stays factorised
+  const stateDependent = ps.elements.some((e) => e.kind === 'truss' && e.tensionOnly) && opt.tensionOnly;
 
   // element geometric matrices
   for (const e of ps.elements) if (e.kind === 'beam' && e.G.length === 0) e.G = beamG(e.L, (e.props as any).ipA, opt.torsionGeometric);
@@ -192,7 +195,7 @@ export function solveFrame(input: SolveInput): SolveResult {
       iterations.push(rec);
       if (it === opt.maxIterations) return { ok: false, u, iters: it, reason: `iteration limit of ${opt.maxIterations} reached without convergence`, neg };
       // tangent
-      if (so || !sky.factored) {
+      if (so || stateDependent || !sky.factored) {
         if (!sky.factor()) { return { ok: false, u, iters: it, reason: 'singular tangent stiffness (mechanism or loss of stability)', neg: sky.negativePivots }; }
       }
       neg = sky.negativePivots;
@@ -223,7 +226,7 @@ export function solveFrame(input: SolveInput): SolveResult {
       }
       lastDu = new Float64Array(nFree);
       for (let p = 0; p < nFree; p++) lastDu[p] = alpha * du[p];
-      ({ fint } = evaluate(u, so, true)); // first order: the stiffness is constant and stays factorised
+      ({ fint } = evaluate(u, so || stateDependent, true)); // first order: the stiffness is constant and stays factorised, unless tension-only members can change state
       R = residual(fint, lam);
       lastRes = Math.hypot(nrm(R, 0), nrm(R, 1));
       if (lastRes > 1e8 * Math.max(r0, 1) && it > 3) return { ok: false, u, iters: it, reason: 'residual is growing without bound (diverging)', neg };
@@ -279,7 +282,7 @@ export function solveFrame(input: SolveInput): SolveResult {
     const r = [0, 1, 2, 3, 4, 5].map((k) => (ps.fixed[i * 6 + k] ? fint[i * 6 + k] - lamC * P[i * 6 + k] : 0)) as Vec6;
     reactions.set(s.node, r);
   }
-  const elements = recoverElements(ps, evals, uc, u0l, feq, qLocal, lamC);
+  const elements = recoverElements(ps, evals, uc, u0l, feq, qLocal, lamC, so);
   const res: SolveResult = {
     status, converged: status === 'converged', message, lambdaReached: lamC, displacement, reactions, elements, iterations, steps: stepsLog, totalIterations: totalIters, options: opt,
   };
@@ -298,7 +301,7 @@ const herm = (L: number, x: number) => {
   return [1 - 3 * s * s + 2 * s ** 3, x * (1 - s) ** 2, 3 * s * s - 2 * s ** 3, x * (s * s - s)];
 };
 
-function recoverElements(ps: Prepared, evals: ElemEval[], u: Float64Array, u0l: (Float64Array | null)[], feq: Float64Array[], qLocal: [number, number, number][], lam: number): ElementResult[] {
+function recoverElements(ps: Prepared, evals: ElemEval[], u: Float64Array, u0l: (Float64Array | null)[], feq: Float64Array[], qLocal: [number, number, number][], lam: number, secondOrder: boolean): ElementResult[] {
   void u;
   const out: ElementResult[] = [];
   for (const e of ps.elements) {
@@ -320,15 +323,16 @@ function recoverElements(ps: Prepared, evals: ElemEval[], u: Float64Array, u0l: 
         const x = (e.L * s) / nS;
         if (s === 0) { stations.push([x0, -fl[0], -fl[1], -fl[2], -fl[3], -fl[4], -fl[5]]); continue; }
         if (s === nS) { stations.push([x0 + e.L, fl[6], fl[7], fl[8], fl[9], fl[10], fl[11]]); continue; }
-        // equilibrium of the left part, on the deformed geometry (P-δ via the Hermite deflection)
+        // equilibrium of the left part, on the deformed geometry (P-δ via the Hermite deflection). In a FIRST-order analysis the equilibrium is that of the undeformed
+        // member: the deformation terms are left out (they would add N·δ to a moment that is linear by definition).
         const H = herm(e.L, x);
         const vx = H[0] * ut[1] + H[1] * ut[5] + H[2] * ut[7] + H[3] * ut[11];
         const wx = H[0] * ut[2] - H[1] * ut[4] + H[2] * ut[8] - H[3] * ut[10];
         const N = -fl[0] - q[0] * x;
         const Vy = -fl[1] - q[1] * x;
         const Vz = -fl[2] - q[2] * x;
-        const Mz = -fl[5] + x * fl[1] + (ut[1] - vx) * fl[0] + (q[1] * x * x) / 2;
-        const My = -fl[4] - x * fl[2] - (ut[2] - wx) * fl[0] - (q[2] * x * x) / 2;
+        const Mz = -fl[5] + x * fl[1] + (secondOrder ? (ut[1] - vx) * fl[0] : 0) + (q[1] * x * x) / 2;
+        const My = -fl[4] - x * fl[2] - (secondOrder ? (ut[2] - wx) * fl[0] : 0) - (q[2] * x * x) / 2;
         stations.push([x0 + x, N, Vy, Vz, -fl[3], My, Mz]);
       }
     }

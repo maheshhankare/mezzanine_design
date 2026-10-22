@@ -1,0 +1,118 @@
+# Outstanding structural-validation items: register and implementation plan
+
+Status of this document: **PLAN FOR REVIEW. No calculation or design-affecting code was changed to produce it.** Nothing below is marked VERIFIED. An item can become VERIFIED only after the code basis, implementation, independent calculation, regression test and evidence have been reviewed by you; passing software tests alone does not establish compliance.
+
+Statuses used: `PENDING` (not started or blocked), `PENDING — STANDARD REQUIRED`, `IN PROGRESS`, `REVIEW` (evidence collected, waiting for your review), `VERIFIED` (none yet).
+
+Work rules: existing feature branch only, local non-destructive testing, no merge / deployment / production, credential or access change, no invented provisions, no assumed defaults, no warning suppression. Where a reference is missing, the exact document needed is named and the check stays unresolved.
+
+## Evidence gathered while preparing this plan (read-only)
+The IS 800:2007 page images (supplied scan) were rendered and read for: 4.3-4.4 (p. 24), Table 4 (p. 29), 2.2.4.1 (p. 12), 6.1-6.3.1 (p. 32), 7.2 (p. 35), 7.5.1.2, 7.5.2, Table 12 (p. 48), 8.3 / Table 15 (p. 58), 10.2-10.4 (p. 73-76). The RSTAB Detail 3 report prints the effective lengths it used (section 4.10).
+
+## Register
+
+### OI-01 Cold-formed member resistance
+| Field | Content |
+|---|---|
+| Code / clause | IS 801 (cold-formed light-gauge steel structural members). IS 800:2007 does not cover thin cold-formed sections (class 4 refers to IS 801, clause 3.7.2). |
+| Status | **PENDING — STANDARD REQUIRED** |
+| Missing reference | IS 801: the edition you want to apply (the register currently names IS 801:1975, a working-stress standard) and its amendments; for a limit-state design of these sections, your written decision on the standard and method. No other standard will be substituted without your written approval. |
+| Affected checks | C-section bending, shear, web crippling, lateral-torsional buckling, flexural-torsional buckling, built-up connectors, deck and joist cold-formed members, bearing on thin material |
+| Method when the standard is supplied | Read the clauses on the page images; list the inputs (effective widths, thickness limits, stress basis: working stress vs limit state, load combinations of that standard); implement; verify by independent hand calculation of at least three sections; regression tests; register entry with evidence pages. |
+| Test evidence | none (checks show demand and REVIEW; `test:legacy` asserts they cannot PASS) |
+| Risk | Until resolved the C-section designer gives no resistance verdict at all. |
+
+### OI-02 Connections and column bases (separate sub-items; bolts 10.2 / 10.3 are kept apart)
+| ID | Provision | Status | Needed | Method / evidence | Risk |
+|---|---|---|---|---|---|
+| OI-02a | Bearing-type bolts: 10.2.1 (Table 19), 10.2.2, 10.2.4.2, 10.3.2-10.3.6 | **REVIEW** (formulas read on the page images, implemented in `restraint.ts` and `resist.ts`, 48 hand-value tests in `test:restraint`; waiting for your review) | A_n (net tensile stress area): IS 1367 not supplied (ISO metric table used); 10.2.3 maximum spacing and 10.2.4.3 maximum edge distance not implemented; 10.3.3.3 packing plates and countersunk heads not implemented | Independent hand calculation of one connection of each type | Existing bolt checks must not be read as connection adequacy |
+| OI-02b | Welds: 10.5 (fillet 10.5.7.1.1, butt, slot / plug, site welds, long joints 10.5.7.3), 10.5.x detailing | PENDING | Read pages 82-86 on the images; weld metal strength and partial factors (Table 5: shop 1.25, site 1.50), throat, effective length, electrode data from the user | Hand calculation of fillet-weld groups (eccentric load, elastic group) | Weld checks currently REVIEW |
+| OI-02c | Friction-grip bolts: 10.4 (slip 10.4.3: V_nsf = μ_f n_e K_h F_o, γ_mf 1.10 / 1.25, Table 20 μ_f; capacity after slip 10.4.4; tension 10.4.5; combined shear and tension) | PENDING (10.4.1-10.4.3 text seen; 10.4.5 onward not yet read) | Bolt grade, proof stress, surface treatment (μ_f), hole type, slip at service or ultimate | Hand calculation; compare with a bearing-type result | not implemented |
+| OI-02d | Column bases: 7.4 (slab base 7.4.3, minimum thickness 7.4.3.1, bearing on concrete 7.4.3.3, welded bases 7.4.3.4); anchor bolts | PENDING | Concrete bearing strength refers to the concrete standard (IS 456, not supplied); anchorage in concrete: no standard supplied; base-plate moment (fixed bases) | Hand calculation of a slab base | Base checks REVIEW; concrete checks need IS 456 |
+| OI-02e | Block shear: 6.4 (6.4.1 bolted connections) and the note to 10.3.4 | PENDING (6.4 text not yet read on the image) | Hole pattern, edge distances, f_y, f_u | Hand calculation | currently REVIEW |
+| OI-02f | Local effects at hollow-section walls (10.1.2) | PENDING | No explicit IS 800 resistance equation identified yet; a reference (SP, IS 4923 or a handbook) must be named by you | — | Connection to box columns cannot be verified |
+
+### OI-03 IS 800 amplification factor (4.4.2, 4.4.3.2, 4.4.3.3)
+What the text says (read on the page image, p. 24): in a **first-order** analysis the effects of the changed geometry are neglected; the bending moments **shall be allowed for by moment amplification of 4.4.3.2 or 4.4.3.3**; where the amplification factors C_y, C_z are greater than **1.4**, a second-order elastic analysis per **Annex B** shall be carried out (4.4.2, 4.4.3.1 a / b). 4.4.3.2 (non-sway): amplification "as in 9.3.2.2". 4.4.3.3 (sway): "the product of the moment amplification factor [see 9.3.2.2 (C_my, C_mz)] and the moment from the first-order analysis".
+| Field | Content |
+|---|---|
+| Status | **IN PROGRESS (interpretation)**: C_y and C_z are not defined anywhere in the clause; the references point to C_my and C_mz of 9.3.2.2 / Table 18, which are equivalent-uniform-moment factors (≤ 1 for sway 0.9), not magnification factors. Implementing a factor without a definition would be an invention. |
+| Required input | **Your decision, with a reference:** (a) accept that the application designs only on the second-order elastic analysis of Annex B (current behaviour), or (b) name the authoritative definition of C_y, C_z (a code commentary or handbook you consider authoritative) so the first-order route can be implemented. |
+| Double counting | In the Annex B second-order analysis the moments of P-Δ and P-δ are already in the member moments (B-2.2 takes the maximum along the member). The K_y, K_z, C_m factors of 9.3.2.2 remain in the member strength check by that clause; they are not an additional amplification of the analysis moments, and no extra amplification is applied to second-order results. To be demonstrated by test (see below). |
+| Plan | (1) Label every first-order result **NOT FULLY DESIGN-VERIFIED** in the results, record and report (a label only; proposed as the first change, non-design-affecting). (2) Hand calculation: a portal frame and a braced column with known P-Δ / P-δ moments; compare first-order, second-order (solver) and the amplification of the chosen definition. (3) Benchmark mezzanine: first-order vs second-order moments per member, to quantify the omission. (4) Regression tests for each. |
+| Risk | Without (1) a first-order result could be mistaken for a verified one; currently first-order results are refused for design, which is the safe state. |
+
+### OI-04 Table 4 and clause 2.2.4.1 (provisional items)
+| Field | Content |
+|---|---|
+| Status | **REVIEW** (evidence now collected from the page images; waiting for your review before any change of the register) |
+| Source | IS 800:2007 (Third Revision, Dec 2007, supplied scan, no amendment): clause 2.2.4.1 (p. 12) and Table 4 "Partial Safety Factors for Loads, γ_f, for Limit States" with clauses 3.5.1 and 5.3.3 (p. 29). |
+| 2.2.4.1 | Read: unit mass 7 850 kg/m³; **E = 2.0 × 10⁵ N/mm²**; Poisson ratio 0.3; **G = 0.769 × 10⁵ N/mm²**; α = 12 × 10⁻⁶ /°C. The assumed E = 200 000 N/mm² of the C-section designer **matches**. |
+| Table 4 | Read (first row, the one used by the C-section designer), strength limit state: **DL + LL + CL: DL 1.5, LL leading 1.5, LL accompanying 1.05**; serviceability: DL 1.0, LL leading 1.0, accompanying 1.0. Notes read: the leading live load is the one causing the higher effect in the member / section; the dead-load value 0.9 applies when the dead load contributes to stability against overturning or reduces the effect (rows with wind / earthquake and erection). The remaining rows (wind / earthquake, erection, accidental) were seen but are **not yet transcribed**; they will be transcribed and double-checked in the review step before any use. |
+| Findings to put to you | (a) The designer's 1.5 (DL + IL) is correct for **a single imposed load (the leading live load)**; with several simultaneous live loads the accompanying factor is **1.05**, not 1.5; the tool applies 1.5 to the whole imposed load. (b) The tool does not implement the 0.9 dead-load factor (uplift / overturning) nor the wind, earthquake, erection and accidental rows. (c) The RSTAB benchmark uses 1.4 DL + 1.5 LL, which is **not** Table 4; it remains a benchmark reproduction only. (d) Load-combination factors of frame projects are entered by the user; the application does not check them against Table 4 (a warning is proposed). (e) Pattern loading with a favourable dead load is not covered (the table gives no reduction for DL + LL). |
+| Plan | After your review: register items IS800-2.2.4.1 and IS800-3.5-Table4 → VERIFIED for the values read; add a visible assumption line to the report ("combination 1.5 DL + 1.5 IL assumes one imposed load; other combinations not implemented"); add a warning for frame-project factors that differ from Table 4; regression tests with hand values. |
+| Risk | The statement "IS 800 combination" in reports is incomplete for multi-live-load cases until (a) is handled. |
+
+### OI-05 RSTAB 9.3.2.2, equations 341 / 351 (differences up to 0.35)
+| Field | Content |
+|---|---|
+| Status | **IN PROGRESS** (not resolved) |
+| What is established | Printed IS 800 9.3.2.2 / Table 18 are implemented as read (register IS800-9.3.2, hand-value tests). Sections 101-221 (tension, section compression, shear, section interaction) agree with RSTAB within its rounding (≤ 0.006). 341 / 351 do not (mean 0.133 / 0.086, max 0.354 / 0.367; example member 2784, CO1, x = 0: ours 0.634, RSTAB 0.280). RSTAB's report (section 4.10) shows it uses **effective length = member length (k = 1.0)**, e.g. member 1: L = 4 000 mm, λ_y = λ_z = 67.69 = L / 59.1 mm, so the effective length is **not** the cause. |
+| Hypotheses to test (not to be "tuned") | (1) which moments RSTAB takes as M_y, M_z (maximum along the member, at the station, or the larger end) and the sign convention; (2) C_my, C_mz, C_mLT (sway 0.9 vs Table 18 row from the end moments); (3) K_LT / λ_LT for a hollow section (RSTAB may apply lateral-torsional terms; IS 800 8.2.2 treats a hollow section as not susceptible); (4) which axis RSTAB calls minor / major for a square tube; (5) whether the axial force is the maximum compression over the member or at the station; (6) section class assignment and the resulting M_dy / M_dz; (7) member segmentation (columns are split into a 4 000 mm and a 500 mm member in the model). |
+| Method | Build a reproducible benchmark script that prints, for ten selected members (the extremes of the 341 / 351 difference): the member forces at each station, all intermediate terms of the equations (P_d, λ, K, C_m, M_d), RSTAB's printed ratio, and a hand calculation done by a second implementation (spreadsheet-style, independent of the code). The comparison identifies **which term** differs; the technical reason is documented even if RSTAB's interpretation differs from the printed text. Acceptance tolerance: ±0.01 (RSTAB prints two decimals) where the interpretation is shown to be identical; otherwise the difference is documented, not hidden. |
+| Missing input | RSTAB's calculation details for 341 / 351 (intermediate values, if the program can print them: "Details" of the design case), or the RSTAB STEEL IS manual page for 9.3.2.2. |
+| Risk | The overall-member utilisation of box columns cannot be called validated against RSTAB. |
+
+### OI-06 Other outstanding checks (each independent)
+| ID | Provision | Status | What the text says / needs | Inputs required | Verification |
+|---|---|---|---|---|---|
+| OI-06a | Angle struts: 7.5 | PENDING | 7.5.1.1 concentric, **7.5.1.2 loaded through one leg: λ_e = √(k₁ + k₂ λ_vv² + k₃ λ_φ²)** with k₁-k₃ from Table 12 (number of bolts at each end, gusset fixity fixed / hinged, interpolation for partial restraint), λ_vv, λ_φ with ε; 7.5.2 double angle struts (discontinuous 0.7-0.85 L in the plane of the gusset); 7.5.3 continuous members; 7.5.4 combined stresses by 9.3 (page 47 / 7.5.1.1 not yet read) | leg widths, thickness, bolts at each end, gusset fixity, centre-to-centre length l, f_y | hand calculation of one single and one double angle |
+| OI-06b | Net-section rupture: 6.3 | PENDING | 6.3.1 plates: **T_dn = 0.9 A_n f_u / γ_m1** (read, p. 32); 6.3.2 threaded rods, 6.3.3 single angles, 6.3.4 other sections: to read | hole pattern (net area, staggered holes), f_u, connection type | hand calculation |
+| OI-06c | Effective length: 7.2, Table 11, Annex D | PENDING | 7.2.1-7.2.4 read: KL from the actual length and the end conditions; **Table 11 applies where the frame analysis does not consider equilibrium in the deformed shape**; D-1 is for such cases. With the second-order analysis used here, the clause does not say which effective length to use for the in-plane check (decision needed). Out-of-plane, bracing and 7.2.3 / 7.2.4 apply. | end restraint conditions, sway / non-sway classification | hand calculation of a column in each Table 11 case; compare solver P-Δ result and Euler load |
+| OI-06d | Open-section members (I, channel, built-up) | PENDING | 8.2.2 / 8.2.2.1 lateral-torsional buckling (Tables 13 and 14), 8.4.2 shear buckling, 8.7 web crippling and bearing, 9.3 interaction for open sections, Table 2 classification for I and channel, 8.3 effective length and restraint (read on p. 58) | section properties (IS 808 tables not supplied: user-entered), restraints, load position, support conditions | hand calculation and a published solved example (reference to be named by you) |
+| OI-06e | Table 18 row C (equivalent uniform moment factor for concentrated or end-moment patterns) | PENDING — REFERENCE REQUIRED | The supplied scan prints inconsistent coefficients (e.g. "0.095 − 0.05 α_h" for 0.95). | A second, clean copy of IS 800:2007 Table 18 (or the BIS amendment / errata) | check against the table values and a hand calculation |
+
+### OI-07 RSTAB comparison discrepancies (1.7 % sway; column lean-direction offset)
+| Field | Content |
+|---|---|
+| Status | **PENDING** (root cause not established; documented effects in `docs/RSTAB_BENCHMARK.md` section 5.2; the 12 mm edge drift is explained, not these two) |
+| Facts | Support forces ≤ 0.1 %, displacements ≤ 1.7 %, member forces ≤ 2 % except the column moment in the lean direction (≤ 4.8 kNcm absolute, up to 4.2 % relative). |
+| Investigation plan (evidence before any change) | A1 first-order comparison only (geometric stiffness off): if it matches to < 0.1 % the cause is in the second-order formulation; A2 same with Theory II vs von Kármán; B1 member local-axis orientation and the β rotation of every column / beam (RSTAB axes vs solver axes), checked per member from the `.rs8`; B2 the imperfection loads: nodal vs member distribution, the point of application, the N used (first-order, frozen or current); B3 the stiffness assumptions (shear areas A_y, A_z, torsion J, hinge stiffness in the end releases); B4 supports (stiffness, orientation); B5 combination factors and load-case definitions; B6 RSTAB's P-Δ implementation (which of the member effects it includes: the report names the setting). Output: a table of each experiment with the quantified change in sway and in the lean-direction column moment. |
+| Missing input | A small RSTAB test model (2-3 members: a single column with a lateral load and an axial load; a portal) run first order and second order in RSTAB, with the solver comparison, to separate formulation from model-reproduction differences. I cannot run RSTAB; you would need to supply these results, or authorise a different reference solution (closed form). |
+| Risk | The residual affects the validity statement "agreement within 2 %". |
+
+## Proposed sequence (each step to be approved before design-affecting code changes)
+1. **Now (safe):** this register and the label proposal in OI-03 (a label, no calculation change).
+2. Investigation without code change: OI-05 and OI-07 diagnostic scripts (read-only, outputs stored under `benchmarks/`).
+3. Read the pending IS 800 clauses on the page images (6.3.2-6.3.4, 6.4, 7.4, 7.5.1.1, Table 11 / D-1, 8.2.2.1, 8.4.2, 10.4.5, 10.5): report the text and the proposed implementation per item for your review; no implementation before the review.
+4. After your review, implementation item by item, each with: register entry (`status` set honestly), hand-calculation test, regression test, evidence file; then your review before VERIFIED.
+5. Items that need a reference you must supply (OI-01 IS 801, OI-02d concrete standard, OI-02f, OI-03 definition, OI-06e clean Table 18, OI-07 RSTAB test models) stay unresolved until supplied.
+
+## Decisions and documents needed from you
+1. IS 801: edition / method decision (OI-01).
+2. OI-03: accept "second-order elastic analysis only", or supply the definition of C_y, C_z.
+3. OI-04: review of the Table 4 / 2.2.4.1 evidence and the findings (a)-(e).
+4. OI-05: RSTAB calculation details for 341 / 351, if obtainable.
+5. OI-06e: a clean copy of Table 18.
+6. OI-02d / OI-02f: the concrete / anchorage standard and any reference for hollow-section wall checks.
+7. OI-07: small RSTAB test models, or approval of closed-form references.
+
+## Regression protection
+Every item that reaches VERIFIED gets its own test (`scripts/test-*.ts`) and a register entry. All previously passing tests (`test:no-en`, `legacy`, `restraint`, `codes`, `design`, `frame`, `integration`, `rstab`, `engine`, `bundle`, live API and `/frame` tests) are re-run after each change and their results reported.
+
+## Update 2026-10-23 (Phase 1 evidence; `review-pack/PHASE1_REVIEW_PACK.md`, git-ignored)
+* **OI-01:** IS 801 supplied: IS 801:1975 First Revision, Seventh Reprint Dec 1998 incl. Amendment No. 1, reaffirmed 2006. It is a **working-stress** standard (F = 0.60 F_y), kgf/cm², refers to IS 800-1962 / IS 875-1964 / IS 1079-1973. Status stays **PENDING — STANDARD REQUIRED** until you choose the method (service-load working-stress check under IS 801:1975, a newer edition, or pending).
+* **OI-03:** the symbols C_y, C_z, δ_b, c_b, c_s are not given a formula anywhere in the supplied text; the symbol list and Table 18 use C_my / C_mz for two different things. B-2.2's last paragraph (M = δ_b M_m) has two possible readings. Label wording proposed in the pack (not implemented).
+* **OI-04:** 2.2.4.1 and Table 4 read from two captures (mine and yours): E, G, ν match the application; 1.5 DL + 1.5 LL is the "leading live load" row (accompanying 1.05); serviceability 1.0 / 1.0 matches. Status **REVIEW**, awaiting your sign-off.
+* **OI-05:** exploratory analysis (no code change, `scripts/rstab/explore-9322.cjs`): RSTAB's 341 / 351 are reproduced for about half of the rows (146 / 291 and 102 / 291 within its rounding) by a reading that uses the moment at the station, C_m from the member end moments, the reverse pairing of equation numbers and the swapped axis. This differs from the printed "maximum moments" and sway 0.9. Status **IN PROGRESS**; needs RSTAB calculation details and your decision.
+* **OI-06e:** the Table 18 page you sent is the same printed page as in the supplied PDF; the row C inconsistencies are in the print itself. A second copy or errata is still needed.
+
+## Update 2026-10-23 (Phase 2 items 5, 6, 7)
+Documents: `docs/SECOND_ORDER_TECHNICAL_NOTE.md` (item 5), `docs/FOUNDATION_AND_LOCAL_CHECK_REFERENCES.md` (item 6), `docs/RSTAB_TEST_MODELS.md` with reference values in `benchmarks/rstab-test-models/reference-values.md` (item 7).
+* **OI-03 / OI-06c:** three open double-counting-versus-omission questions are stated with options (δ_b after a direct second-order analysis; the K factors of 9.3.2.2 on second-order moments; effective length with a second-order analysis). None applied.
+* **OI-02d / OI-02f:** IS 800 7.4 and Annex F-5 give the steel side of column bases (bearing 0.6 f_ck with cube strength, friction 0.45, slab-base thickness, holding-down-bolt rules); **no supplied standard gives anchor-bolt resistance in concrete or local resistance of a hollow-section wall**; IS 456:2000 is in the library for bearing (34.4) and punching (31.6).
+* **OI-07:** five small RSTAB test models defined (closed forms or hand checks), hypothesis H0 (the lean-direction moment offset of at most 4.8 kNcm is the P-Δ moment of the 0.4 mm sway difference: N × 0.42 mm = 4.8 kNcm for N = 114 kN) stated, acceptance criteria fixed before running RSTAB.
+* **OI-08 (FIXED 2026-10-23 with approval, tests in test:frame; awaiting your review to close):** first-order analysis: interior station moments contain P-δ terms (`recoverElements`); TM3 prints 14.1 kNm instead of 10.0 kNm with 1-2 elements. No design result affected (design on first order is refused); the display of first-order internal forces is.
+* **OI-09 (FIXED 2026-10-23 with approval, tests in test:frame; awaiting your review to close):** first-order analysis with tension-only members does not converge when a member switches off (stiffness not re-assembled). TM4 cases B and D. Second order converges.
+* **OI-10 (new, REVIEW):** defaults to review: base-plate f_y 275 N/mm², help text of `slab_rho` ("v_min").
+* IS 801-related independent verification material found in the library: SP 6(5) (cold-formed light gauge steel structures handbook with commentary and examples), SP 6(3), SP 6(7).

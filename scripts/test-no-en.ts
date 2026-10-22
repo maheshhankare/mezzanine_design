@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
-const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'benchmarks', 'fonts', 'public']);
+const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'benchmarks', 'fonts', 'public', 'review-pack']); // review-pack: local, git-ignored copies of page images and transcriptions of the supplied standards
 const TEXT = /\.(ts|tsx|js|mjs|cjs|json|md|sql|css|html|txt|yml|yaml)$/i;
 // the removed standards, whatever their form
 const PATTERN = /EN[ -]?19\d\d|EN[ -]?10\d{3}|EN[ -]?ISO|EN[ -]?12\d{3}|Eurocode|National Annex|\bNDP\b|AISI|AISC|ASCE[ -]?7|\bSCI P\d+|CIDECT|\bS355\b|\bS275\b|\bS235\b/i;

@@ -10,3 +10,4 @@ _split
 *.pdf
 .vercel
 .env*
+review-pack/

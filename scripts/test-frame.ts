@@ -340,6 +340,47 @@ const midStation = (res: ReturnType<typeof solveFrame>, member = 1) => {
   assert('axially restrained beam: von Karman develops a membrane tension, Theory II none', Nvk > 1e3 && Math.abs(Nt2) < 1, `N = ${Nvk.toFixed(0)} N (von Karman), ${Nt2.toFixed(3)} N (Theory II)`);
 }
 
+// ---------------- 9 first-order analysis: F-1 interior moments are linear (no P-δ terms), F-2 tension-only members that switch state ----------------
+{
+  // F-1: simply supported beam-column, q = 5 N/mm and P = 0.5 P_E. First order: M_max = q L²/8 for ANY number of elements (the axial force must not add N·δ);
+  // second order: the closed form (q/k²)(sec(kL/2) − 1) (8 elements: 2e-5).
+  const L = 4000, q = 5, PE = (Math.PI ** 2 * E * Iy) / (L * L), P = 0.5 * PE;
+  const supp = [{ node: 1, fixed: [true, true, true, true, false, false] as any }, { node: 2, fixed: [false, true, true, true, false, false] as any }];
+  const load = lc({ nodal: [{ node: 2, f: [-P, 0, 0, 0, 0, 0] }], member: [{ member: 1, q: [0, 0, -q], system: 'global' }] });
+  const mmax = (div: number, second: boolean) => { const r = solveFrame({ prepared: prepare(bar(L, div, supp)), combo: [{ lc: load, factor: 1 }], options: { secondOrder: second } }); return Math.max(...r.elements.flatMap((e) => e.stations).map((st) => Math.abs(st[5]))); };
+  for (const div of [2, 4, 8]) check(`F-1 first order, ${div} elements, axial force 0.5 P_E: M_max = q L²/8 (no P-δ term in a first-order moment)`, mmax(div, false), (q * L * L) / 8, 1e-9, 'Nmm');
+  const k = Math.sqrt(P / (E * Iy)), M2 = (q / (k * k)) * (1 / Math.cos((k * L) / 2) - 1);
+  check('F-1 second order, 8 elements: M_max = (q/k²)(sec(kL/2) − 1) (unchanged by the fix)', mmax(8, true), M2, 1e-4, 'Nmm');
+  // a first-order cantilever column with axial force and a lateral load: the moment diagram is linear, H (L − x)
+  const rr = solveFrame({ prepared: prepare(bar(3000, 4, [{ node: 1, fixed: F6 }])), combo: [{ lc: lc({ nodal: [{ node: 2, f: [-100e3, 2e3, 0, 0, 0, 0] }] }), factor: 1 }], options: { secondOrder: false } });
+  const sts = rr.elements.filter((e) => e.member === 1).flatMap((e) => e.stations).sort((a, b) => a[0] - b[0]);
+  const worst = Math.max(...sts.map((st) => Math.abs(Math.abs(st[6]) - 2e3 * (3000 - st[0]))));
+  assert('F-1 first-order cantilever with axial force: the moment diagram is linear H (L − x) at every station', worst < 1e-6 * 2e3 * 3000, `largest deviation ${worst.toExponential(2)} Nmm`);
+}
+{
+  // F-2: braced bay with one tension-only diagonal. First order: it must converge when the diagonal switches off, and give the hand-calculated results.
+  const h = 4000, Lb = 4000;
+  const D = { A: 958, Iy: 22e4, Iz: 41e4, J: 8e3 };
+  const mk = (): FrameModel => ({
+    nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: h }, { id: 3, x: Lb, y: 0, z: 0 }, { id: 4, x: Lb, y: 0, z: h }], materials: mat, sections: { S: sec.S, D },
+    members: [{ id: 1, type: 'beam', n1: 1, n2: 2, section: 'S', material: 'S', divisions: 4 }, { id: 2, type: 'beam', n1: 3, n2: 4, section: 'S', material: 'S', divisions: 4 },
+      { id: 3, type: 'beam', n1: 2, n2: 4, section: 'S', material: 'S', divisions: 2, rel1: { ry: true, rz: true }, rel2: { ry: true, rz: true } }, { id: 4, type: 'truss', n1: 1, n2: 4, section: 'D', material: 'S', tensionOnly: true }],
+    supports: [{ node: 1, fixed: F6 }, { node: 3, fixed: F6 }],
+  });
+  const run = (H: number, order2: boolean, grav = 0) => solveFrame({ prepared: prepare(mk()), combo: [{ lc: lc({ nodal: [{ node: 2, f: [H, 0, -grav, 0, 0, 0] }, { node: 4, f: [0, 0, -grav, 0, 0, 0] }] }), factor: 1 }], options: { secondOrder: order2 } });
+  const off = run(-6e3, false), on = run(6e3, false), tw = run(-6e3, true, 1);
+  assert('F-2 first order, diagonal compressed (switched off): converged', off.converged, off.message);
+  assert('F-2 first order, diagonal stretched (active): converged', on.converged, on.message);
+  assert('F-2 the diagonal carries no force when switched off, and a tension when stretched', Math.abs(off.elements.find((e) => e.member === 4)!.stations[0][1]) < 1e-6 && on.elements.find((e) => e.member === 4)!.stations[0][1] > 1e3);
+  // consistency: with the diagonal off the first-order result equals the second-order result of the same state at a negligible gravity load
+  check('F-2 first order (diagonal off) equals second order with 1 N gravity (same state, no P-Δ)', off.displacement.get(2)![0], tw.displacement.get(2)![0], 1e-4, 'mm');
+  // hand result with the diagonal off: two cantilever columns, pinned beam: u = H / (2 · 3 E I / h³); the solver bends the columns about one of the two axes of the test section
+  const uOff = Math.abs(off.displacement.get(2)![0]);
+  const ref1 = 6e3 / ((2 * 3 * E * Iz) / h ** 3), ref2 = 6e3 / ((2 * 3 * E * Iy) / h ** 3);
+  assert('F-2 diagonal off: sway = H / (2·3EI/h³) of the columns (hand calculation, 0.1 %)', Math.abs(uOff - ref1) / ref1 < 1e-3 || Math.abs(uOff - ref2) / ref2 < 1e-3, `solver ${uOff.toFixed(4)} mm, hand ${ref1.toFixed(4)} / ${ref2.toFixed(4)} mm`);
+  assert('F-2 diagonal active: sway at least 20 times smaller than with the diagonal off', Math.abs(on.displacement.get(2)![0]) * 20 < uOff);
+}
+
 console.log(rows.join('\n'));
 console.log(failed ? `\n${failed} check(s) FAILED` : `\nall ${rows.length} checks passed`);
 process.exit(failed ? 1 : 0);
