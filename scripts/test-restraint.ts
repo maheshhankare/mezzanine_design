@@ -105,7 +105,8 @@ const usr = joist({ j_cred: 'user', j_credJ: 'bolted tabs to the SB-Int top flan
 const usrLow = joist({ j_cred: 'user', j_credJ: 'x', j_Kc: 0.05, j_Ka: 0.5 });
 ok('user-defined mode: credited, labelled USER-DEFINED, with a REVIEW line', usr.j.credited && /USER-DEFINED/.test(usr.j.reason) && usr.j.checks.some((c: any) => /User-defined joist restraint/.test(c.name) && c.status === 'REVIEW'));
 ok('user-defined mode without justification: not credited', !joist({ j_cred: 'user', j_credJ: '' }).j.credited);
-ok('user-defined mode does not hide a failing check', joist({ j_cred: 'user', j_credJ: 'x', j_anR: 0.01 }).j.checks.some((c: any) => c.status === 'FAIL'));
+const uf = joist({ j_cred: 'user', j_credJ: 'x', j_anR: 0.01 });
+ok('user-defined mode does not hide a failing verified check, and a failing check removes the credit', uf.j.checks.some((c: any) => c.status === 'FAIL') && !uf.j.credited && uf.sb.spec.restr.lat.every((q: any) => !q.credited));
 ok('stability of the secondary follows the restraint: M_cr credited > M_cr verified-mode (not credited)', usr.sb.Mcr > none.sb.Mcr * 1.05, `${usr.sb.Mcr} vs ${none.sb.Mcr}`);
 ok('a softer restraint gives a lower M_cr than a stiff one', usrLow.sb.Mcr < usr.sb.Mcr && usrLow.sb.Mcr >= none.sb.Mcr);
 ok('M_cr of the verified-mode (uncredited) run equals the run without joists', near(none.sb.Mcr, joist({ sbi_rst: 'none' }).sb.Mcr, 1e-9));

@@ -164,8 +164,8 @@ export const RST: any = (() => {
     let credited = false, reason;
     if (anch === 'none') reason = 'joist lines not anchored (IS 800 8.3.4)';
     else if (userMode) {
-      credited = String(I.j_credJ || '').trim().length > 0 && anch !== 'none';
-      reason = credited ? 'USER-DEFINED assumption (not an IS 800 result): ' + String(I.j_credJ).trim() + (isFinite(kJ) ? ` (K_J = ${U.fmt(kJ / 1e3, 2)} kN/mm)` : ' (stiffness unknown: rigid)') : 'user-defined restraint without a justification: not credited';
+      credited = String(I.j_credJ || '').trim().length > 0 && anch !== 'none' && !anyFail; // a verified check that fails (e.g. an anchorage below the demand) contradicts the assumption: not credited
+      reason = anyFail ? 'a verified check is not satisfied (the user-defined assumption cannot override it)' : credited ? 'USER-DEFINED assumption (not an IS 800 result): ' + String(I.j_credJ).trim() + (isFinite(kJ) ? ` (K_J = ${U.fmt(kJ / 1e3, 2)} kN/mm)` : ' (stiffness unknown: rigid)') : 'user-defined restraint without a justification: not credited';
       add(CHK.mk({ grp, name: 'User-defined joist restraint', clause: '', review: true, note: 'The restraint is credited by the designer\'s assumption: ' + reason + '. Failing or pending checks above are NOT resolved by it.' }));
     } else if (allOK && isFinite(kJ)) { credited = true; reason = 'every required IS 800 check is verified and satisfied'; }
     else reason = anyFail ? 'a verified check is not satisfied' : 'not verified: ' + [...new Set(miss)].join(', ');
