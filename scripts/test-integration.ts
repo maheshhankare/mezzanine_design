@@ -3,6 +3,7 @@ import { MemoryFrameStore } from '../src/server/frameStore';
 import { createFrameProject, saveFrameProject, readFrameProject, runStoredProject, listRunsWithStatus, readRun, parseProject, ServiceError } from '../src/server/frameService';
 import { frameReportPdf } from '../src/server/frameReport';
 import { buildBenchmarkProject } from './rstab/project';
+import { modelFingerprint } from '../src/server/frame/run';
 import { SETTINGS_VERSION } from '../src/shared/analysisSettings';
 
 let failed = 0, passed = 0;
@@ -28,6 +29,10 @@ const rejects = async (name: string, f: () => Promise<unknown>, status?: number)
   const wd = await readFrameProject(store, U, withDesign.id);
   ok('design switch kept on read', wd.project.settings.design.enabled === true && !wd.migrated && !wd.project.settings.review.required);
   ok('migration is idempotent on a current project', JSON.stringify((await readFrameProject(store, U, withDesign.id)).project.settings) === JSON.stringify(wd.project.settings));
+
+  // the fingerprint does not depend on key order (PostgreSQL jsonb reorders keys): a fresh run is the CURRENT model
+  const reordered = JSON.parse(JSON.stringify(base), (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).reverse()) : v));
+  ok('fingerprint independent of key order', modelFingerprint(reordered) === modelFingerprint(base));
 
   // legacy EN settings: migrated, flagged, review required, cannot run until confirmed
   const legacy: any = JSON.parse(JSON.stringify(base));
@@ -76,7 +81,7 @@ const rejects = async (name: string, f: () => Promise<unknown>, status?: number)
   const sv = await saveFrameProject(store, U, c.id, cur.stored.revision, changed);
   ok('model change detected', sv.modelChanged && sv.revision === 2);
   const runs = await listRunsWithStatus(store, U, c.id);
-  ok('earlier run marked', runs.length === 1 && !runs[0].current && /earlier model revision 1/.test(runs[0].note), JSON.stringify(runs[0]?.note));
+  ok('earlier run marked', runs.length === 1 && !runs[0].current && /earlier model revision 1/.test(runs[0].note) && /settings/.test(runs[0].note), JSON.stringify(runs[0]?.note));
   ok('earlier run record flagged not current', !(await readRun(store, U, o1.runId!)).current);
 
   // settings-only change does not change the model fingerprint unless analysis-relevant; design settings alone must not mark runs stale

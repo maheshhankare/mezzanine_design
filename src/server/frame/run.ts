@@ -16,7 +16,9 @@ import { validateFrameProject, type FrameProjectData, type Combination } from '.
  */
 export const ENGINE_VERSION = 'frame-1.0 (IS 800:2007 design, solver Theory II)';
 
-export const fingerprint = (data: unknown) => createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16);
+/** JSON with the keys of every object sorted: PostgreSQL jsonb does not keep the key order, so a fingerprint must not depend on it */
+const canonical = (v: unknown): unknown => (Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, canonical((v as any)[k])])) : v);
+export const fingerprint = (data: unknown) => createHash('sha256').update(JSON.stringify(canonical(data))).digest('hex').slice(0, 16);
 /** fingerprint of everything that determines the analysis result (model, loads, combinations, settings that affect the numbers) */
 export function modelFingerprint(p: FrameProjectData) {
   const s = p.settings;

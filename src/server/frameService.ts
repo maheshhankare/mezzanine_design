@@ -78,7 +78,7 @@ export async function listRunsWithStatus(store: FrameStore, userId: string, id: 
   const p = await store.getProject(id, userId);
   if (!p) throw new ServiceError(404, 'Project not found');
   const runs = await store.listRuns(id);
-  return runs.map((r) => ({ ...r, current: r.modelFingerprint === p.modelFingerprint, note: r.modelFingerprint === p.modelFingerprint ? 'current model' : `earlier model revision ${r.modelRevision} (the model has changed since)` }));
+  return runs.map((r) => ({ ...r, current: r.modelFingerprint === p.modelFingerprint, note: r.modelFingerprint === p.modelFingerprint ? 'current model' : `earlier model revision ${r.modelRevision} (the model or the analysis / design settings have changed since)` }));
 }
 
 export async function readRun(store: FrameStore, userId: string, runId: string) {
