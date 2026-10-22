@@ -43,6 +43,10 @@ r = await anon.req('/api/projects');
 ok('anonymous /api/projects -> 401', r.status === 401);
 r = await anon.req('/api/admin/users');
 ok('anonymous /api/admin/users -> 401', r.status === 401);
+r = await anon.req('/api/frame/projects');
+ok('anonymous /api/frame/projects -> 401', r.status === 401);
+r = await anon.req('/frame', { raw: true });
+ok('anonymous page /frame redirects to /login', r.status >= 300 && r.status < 400 && (r.headers.get('location') || '').includes('/login'));
 r = await anon.req('/', { raw: true });
 ok('anonymous page / redirects to /login', r.status >= 300 && r.status < 400 && (r.headers.get('location') || '').includes('/login'));
 r = await anon.req('/p/anything', { raw: true });
@@ -72,6 +76,24 @@ r = await B.login(bEmail, bPw);
 ok('user B login', r.status === 200);
 r = await B.req('/api/admin/users');
 ok('non-admin cannot list users (403)', r.status === 403);
+
+// ---- C-section inputs of a removed design route are migrated, never calculated before the review (needs the migration of the project data)
+{
+  const legacyInputs = { code: 'EN', na: 'x', gM0: 1.0, combo: '610ab', mb_gr: 'S355' };
+  let q = await A.req('/api/calc', { method: 'POST', body: { inputs: legacyInputs, units: {} } });
+  const lres = q.status === 200 && typeof q.data === 'string' ? parse(q.data) : null;
+  ok('legacy inputs (removed route) -> migrated, calculation withheld until reviewed', !!lres && lres.res.fatal === true && lres.res.msgs.some((m) => m.id === 'mig_ack'), q.status);
+  q = await A.req('/api/calc', { method: 'POST', body: { inputs: { ...legacyInputs, mig_ack: 'yes' }, units: {} } });
+  const lok = q.status === 200 && typeof q.data === 'string' ? parse(q.data) : null;
+  ok('legacy inputs after the review -> IS 800 route', !!lok && !lok.res.fatal && lok.res.R.code === 'IS');
+}
+// ---- frame API: refuses data that is not a frame project
+{
+  const q = await A.req('/api/frame/projects', { method: 'POST', body: { project: { schema: 'x' } } });
+  ok('frame project: wrong schema -> 422', q.status === 422);
+  const l = await A.req('/api/frame/projects');
+  ok('frame project list -> 200', l.status === 200 && Array.isArray(l.data.projects));
+}
 
 // ---- calculation service
 const defaults = {};

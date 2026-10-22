@@ -36,16 +36,23 @@ export function LeftNav() {
   // sections of the open tab: input groups and result cards found in the rendered pane
   useEffect(() => {
     const found: Item[] = [];
+    // ids are made unique: an index-based id can repeat when elements stay in the page between renders (same id on two sections = duplicate React key)
+    const used = new Set<string>();
+    const uniq = (el: HTMLElement, base: string) => {
+      let id = el.id || base, n = 0;
+      while (used.has(id) || (document.getElementById(id) && document.getElementById(id) !== el)) id = `${base}_${++n}`;
+      used.add(id); el.id = id; return id;
+    };
     document.querySelectorAll<HTMLElement>('#inputs fieldset[data-grp]').forEach((f, i) => {
       if (f.hidden) return;
-      f.id = f.id || 'ng_' + i;
+      uniq(f, 'ng_' + i);
       const l = f.querySelector('legend');
       found.push({ id: f.id, label: l ? l.textContent || 'Inputs' : 'Inputs', res: false });
     });
     document.querySelectorAll<HTMLElement>('#pane section.card').forEach((c, i) => {
       const h = c.querySelector('h3');
       if (!h || c.closest('.dwgrid')) return;
-      c.id = c.id || 'nc_' + i;
+      uniq(c, 'nc_' + i);
       found.push({ id: c.id, label: (h.textContent || '').replace(/\b(PASS|FAIL|REVIEW|N\/A)\b/g, '').trim(), res: true });
     });
     setItems((prev) => (JSON.stringify(prev) === JSON.stringify(found) ? prev : found));

@@ -166,17 +166,6 @@ export const SEC: any = (() => {
     const m = (lo + hi) / 2; return pts.reduce((s, q) => s + q[2] * Math.abs(q[c] - m), 0);
   }
 
-  // sharp-corner notional widths (EN 1993-1-3 5.1(3), Fig. 5.1) and the rounded-corner factor delta (5.1(4))
-  function notional(p) {
-    const t = p.t, bp_t = p.Bt - t, bp_b = p.Bb - t, hp = p.H - t, cp_t = p.Ct > 0 ? p.Ct - t / 2 : 0, cp_b = p.Cb > 0 ? p.Cb - t / 2 : 0;
-    const nb = 2 + (p.Ct > 0 ? 1 : 0) + (p.Cb > 0 ? 1 : 0);
-    const sumBp = hp + bp_t + bp_b + cp_t + cp_b;
-    const delta = 0.43 * nb * p.r * 90 / 90 / sumBp;
-    const minBp = Math.min(bp_t, bp_b, hp, ...(p.Ct > 0 ? [cp_t] : []), ...(p.Cb > 0 ? [cp_b] : []));
-    const neglect = p.r <= 5 * t && p.r <= 0.10 * minBp;
-    return { bp_t, bp_b, hp, cp_t, cp_b, delta, neglect, nbends: nb, minBp };
-  }
-
   // drawing outline: polygon of the solid (centre-line offset by ±t/2)
   function outline(nodesPath, t) {
     const n = nodesPath.length, L = [], R = [];
@@ -189,6 +178,6 @@ export const SEC: any = (() => {
     return L.concat(R.reverse());
   }
 
-  return { validate, path, thinWalled, singleModel, placed, assembly, gross, notional, outline, extents, RHO };
+  return { validate, path, thinWalled, singleModel, placed, assembly, gross, outline, extents, RHO };
 })();
 

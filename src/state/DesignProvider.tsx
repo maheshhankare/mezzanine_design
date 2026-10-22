@@ -72,7 +72,7 @@ const keyOf = (I: Inputs, m: ProjectMeta) => JSON.stringify([diffOf(I), META_KEY
 
 export function DesignProvider({ user, initial, children }: { user: User; initial: { project: ProjectState; inputs: Inputs; isNew: boolean }; children: ReactNode }) {
   const [project, setProject] = useState<ProjectState>(initial.project);
-  const [I, setI] = useState<Inputs>(() => Object.assign(SCHEMA.defaults(), initial.inputs));
+  const [I, setI] = useState<Inputs>(() => Object.assign(SCHEMA.defaults(), SCHEMA.migrate(initial.inputs).inputs));
   const [res, setRes] = useState<any>(null);
   const [takeoff, setTakeoff] = useState<any>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -167,7 +167,7 @@ export function DesignProvider({ user, initial, children }: { user: User; initia
   }, []);
 
   const replaceInputs = useCallback((obj: Inputs | null) => {
-    const next = Object.assign(SCHEMA.defaults(), obj || {});
+    const next = Object.assign(SCHEMA.defaults(), SCHEMA.migrate(obj || {}).inputs);
     Iref.current = next;
     setI(next);
   }, []);

@@ -2,7 +2,6 @@
 import "server-only";
 import { LOADS } from './loads';
 import { SEC } from './section';
-import { EN } from './en_section';
 import { RST } from './restraint';
 import { U } from '@/shared/util';
 import { COL } from './column';
@@ -11,8 +10,7 @@ import { SCHEMA } from '@/shared/schema';
 import { CHK } from '@/shared/check';
 // ===== Optimisation engine: parametric search driven by the full system model. Never changes the user's inputs by itself =====
 // Every candidate is checked by MODEL.compute (the same engine as the design tabs); nothing is estimated except two safe screens:
-//  • bending:    M_Ed,lb = M_Ed − M_self-weight(current) is a lower bound on the candidate's M_Ed; M_c,Rd from W_eff (EN) or φ S f_y (AISI)
-//                is the candidate's exact cross-section resistance (EN) or an upper bound (AISI) → η_lb ≤ η_actual.
+//  • bending:    no screen: the cold-formed bending resistance needs IS 801, which is not implemented (the checks are pending).
 //  • deflection: δ_lb = (δ − δ_self-weight,max) · I_y / I_y,cand (linear elastic, uniform EI, rigid supports) ≤ δ_actual.
 //  Screens are only used with pinned member ends (a semi-rigid end makes the moment depend on the member stiffness).
 // Search = enumeration of the user's permitted grid, screened, then evaluated best-first by the objective: with an objective that is
@@ -257,7 +255,7 @@ export const OPT: any = (() => {
       if ((top.rho_f !== undefined && top.rho_f < 0.999) || (web.rho !== undefined && web.rho < 0.999)) return 'Case C – bending resistance governed by local buckling (effective widths)';
       return 'Case B – bending resistance (yielding of the effective section)';
     }
-    return ({ defl: 'Case A – deflection (stiffness) governs', ltb: 'Case E – lateral-torsional buckling governs', shear: 'Case F – shear / web check governs', conn: 'Case G – the end connection governs', tors: 'Torsion from the eccentric load governs (warping / minor-axis stresses)', twist: 'Twist (serviceability of the torsion) governs', hdefl: 'Horizontal deflection from the torsion governs', bu: 'Built-up connection governs', buckN: 'Member buckling under axial force governs', geom: 'Geometric proportions (EN 1993-1-3 Table 5.1)', fork: 'End fork restraint not demonstrated' })[c] || (m.gov || '');
+    return ({ defl: 'Case A – deflection (stiffness) governs', ltb: 'Case E – lateral-torsional buckling governs', shear: 'Case F – shear / web check governs', conn: 'Case G – the end connection governs', tors: 'Torsion from the eccentric load governs (warping / minor-axis stresses)', twist: 'Twist (serviceability of the torsion) governs', hdefl: 'Horizontal deflection from the torsion governs', bu: 'Built-up connection governs', buckN: 'Member buckling under axial force governs', geom: 'Geometric proportions', fork: 'End fork restraint not demonstrated' })[c] || (m.gov || '');
   }
   // which parameters influence which failure mode (used to explain and to order the lever study)
   const LEVERS = { defl: ['H', 'arr', 't', 'Bt'], bend: ['t', 'H', 'Bt', 'Ct', 'arr'], ltb: ['arr', 'Bt', 't', 'H', 'Ct'], shear: ['t', 'H'], tors: ['arr', 'Bt', 't', 'H'], twist: ['arr', 'Bt', 't', 'H'], hdefl: ['arr', 'Bt', 't'], conn: ['t'], bu: [], buckN: ['t', 'Bt', 'arr'], geom: ['t', 'Ct'] };
@@ -265,25 +263,16 @@ export const OPT: any = (() => {
   function screenData(res, k, I) {
     if (kind(k) !== 'C') return null;
     const d = k === 'mb' ? res.mods.mb.gov : res.mods[k];
-    if (!d || d.error || d.spec.endKr || res.R.code === 'IS') return null;
+    if (!d || d.error || d.spec.endKr) return null;
     const sw = d.gross.A * 7850e-9 * LOADS.g, aG = d.comb.aG, L = Math.max(...d.spec.supports.slice(1).map((x, i) => x - d.spec.supports[i]));
     const Msw = aG * sw * L * L / 8, MsagLB = Math.max(0, d.env.Mmax - Msw), MhogLB = Math.max(0, -d.env.Mmin - Msw);
     const dc = d.checks.find(c => /Vertical deflection/.test(c.name) && isAct(c));
     const dsw = 5 * sw * L ** 4 / (384 * res.R.E * d.gross.Iyy);
-    return { MsagLB, MhogLB, dLB: dc ? Math.max(0, dc.Ed - dsw) : 0, dlim: dc ? dc.Rd : Infinity, Iyy: d.gross.Iyy, code: res.R.code, gM0: res.R.code === 'EN' ? res.R.gM0 : 1 };
+    return { MsagLB, MhogLB, dLB: dc ? Math.max(0, dc.Ed - dsw) : 0, dlim: dc ? dc.Rd : Infinity, Iyy: d.gross.Iyy, code: res.R.code };
   }
   function screen(sd, I, k, c) {
     if (!sd) return { lb: 0 };
-    const J = Object.assign({}, I, c.ov), p = { H: +J[k + '_H'], Bt: +J[k + '_Bt'], Bb: +J[k + '_Bb'], Ct: +J[k + '_Ct'], Cb: +J[k + '_Cb'], t: +J[k + '_t'], r: +J[k + '_r'] };
-    const arr = J[k + '_arr'], opt = { gap: +J[k + '_gap'], pairSpacing: +J[k + '_ps'] }, fy = +J[k + '_fy'], E = +J.E, nu = +J.nu;
-    let lbB = 0, why = '';
-    try {
-      if (sd.code === 'EN') {
-        const eP = EN.arrangementEff(p, arr, opt, fy, E, nu, 'My+'), McP = Math.min(eP.Wtop, eP.Wbot) * fy / sd.gM0;
-        lbB = sd.MsagLB / McP;
-        if (sd.MhogLB > 1e3) { const eN = EN.arrangementEff(p, arr, opt, fy, E, nu, 'My-'); lbB = Math.max(lbB, sd.MhogLB / (Math.min(eN.Wtop, eN.Wbot) * fy / sd.gM0)); }
-      } else { const g = SEC.gross(p, arr, opt); lbB = Math.max(sd.MsagLB, sd.MhogLB) / (0.9 * fy * Math.min(g.Wy_top, g.Wy_bot)); }
-    } catch (e) { lbB = 0; }
+            let lbB = 0, why = '';
     const lbD = sd.dLB * sd.Iyy / c.Iyy / sd.dlim;
     if (lbB > 1 + 1e-9) why = `bending lower bound η ≥ ${U.fmt(lbB, 2)}`;
     else if (lbD > 1 + 1e-9) why = `deflection lower bound η ≥ ${U.fmt(lbD, 2)}`;

@@ -1,4 +1,6 @@
-// @ts-nocheck — ported verbatim from the mockup (index.html, 80_restraint.js); logic unchanged so results match the mockup.
+// @ts-nocheck — ported from the mockup (index.html, 80_restraint.js). IS 800:2007 only. The restraint, bracing-force and stability-bracing rules of the removed design route were
+// deleted: IS 800 has no verified equivalent (see the code register), so those checks are pending and no surface / joist restraint is credited. Notional horizontal forces:
+// IS 800:2007 4.3.6 (0.5 %, verified).
 import "server-only";
 import { LOADS } from './loads';
 import { SEC } from './section';
@@ -7,7 +9,11 @@ import { CHK } from '@/shared/check';
 import { MEM } from './member';
 import { CONN } from './conn';
 import { RES } from './resist';
-// ===== Surface / decking, joist beams, knee braces and bracing =====
+import * as RD from '../frame/design/restraint';
+import * as RD_IS from '../frame/design/is800';
+import { designHollowMember } from '../frame/design/member';
+// ===== Surface / decking, joist beams, knee braces and bracing (IS 800:2007) =====
+const NEEDSURF = 'No verified IS 800 provision exists in the code register for this check (timber, cold-formed deck and stability-bracing rules are outside the verified scope): the check is pending.';
 export const RST: any = (() => {
   const s = CHK.s, kN = x => x / 1e3, kNm = x => x / 1e6;
   const KRIGID = 1000; // N/mm per mm: continuous lateral spring used when a restraint is demonstrated as "full" (S ≥ S_req)
@@ -20,21 +26,17 @@ export const RST: any = (() => {
     const M = wU * span * span / 8, typ = I.d_type; // per mm width (single span, conservative)
     const dlim = span / (+I.d_dl || 200);
     if (typ === 'mdf') {
-      const t = +I.d_t, W = t * t / 6, fmd = +I.d_kmod * +I.d_fmk / +I.d_gm, sig = M / W;
-      add(CHK.mk({ grp, name: 'Board bending between the secondaries (1 mm strip, single span)', clause: 'EN 1995-1-1 6.1.6 with f_m,d = k_mod f_m,k / γ_M (board values from the producer / EN 12369-1)', Ed: sig, Rd: fmd, unit: 'N/mm²', fmt: v => v, basis: 'user',
-        steps: [s('w_Ed', 'ULS area load', wU * 1e3, 'kN/m²'), s('L', 'secondary spacing', span, 'mm'), s('M', 'w L²/8', M, 'N·mm/mm'), s('σ', 'M/(t²/6)', sig, 'N/mm²')], note: 'Board strength / stiffness are user inputs; verify against the product declaration.' }));
+      const t = +I.d_t, W = t * t / 6, sig = M / W;
+      add(CHK.pending({ grp, name: 'Board bending between the secondaries (1 mm strip, single span)', clause: '', Ed: sig, unit: 'N/mm²', fmt: v => v,
+        steps: [s('w_Ed', 'ULS area load', wU * 1e3, 'kN/m²'), s('L', 'secondary spacing', span, 'mm'), s('M', 'w L²/8', M, 'N·mm/mm'), s('σ', 'M/(t²/6)', sig, 'N/mm²')] }, 'Timber / board design is outside IS 800:2007: the board resistance is pending.'));
       const EI = +I.d_Em * t ** 3 / 12, def = 5 * wS * span ** 4 / (384 * EI);
-      add(CHK.mk({ grp, name: 'Board deflection (instantaneous, no creep k_def)', clause: 'EN 1995-1-1 7.2 (limit by project)', Ed: def, Rd: dlim, unit: 'mm', fmt: v => v, basis: 'user', note: 'Creep (k_def) not included – review for long-term storage loads.' }));
-      if (+I.QpLoc > 0) {
-        const P = +I.QpLoc * 1e3 * comb.aQ, bef = Math.min(span, 0.5 * span + 100), Mp = P * span / 4 / bef;
-        add(CHK.mk({ grp, name: 'Board under the concentrated load', clause: 'Effective width b_ef = 0.5 L + 100 mm (documented approximation)', Ed: Mp / W, Rd: fmd, unit: 'N/mm²', fmt: v => v, basis: 'approx' }));
-      }
+      add(CHK.mk({ grp, name: 'Board deflection (instantaneous, no creep)', clause: 'project limit', Ed: def, Rd: dlim, unit: 'mm', fmt: v => v, basis: 'user', note: 'Board stiffness is a user input; creep is not included – review for long-term storage loads.' }));
+      if (+I.QpLoc > 0) add(CHK.pending({ grp, name: 'Board under the concentrated load', clause: '', unit: 'N/mm²' }, 'Timber / board design is outside IS 800:2007.'));
     } else if (typ === 'steel') {
       const Wm = +I.d_W / 1000, Im = +I.d_I / 1000, fy = +I.d_fy; // per mm width
-      const MRd = Wm * fy / (R.code === 'EN' ? R.gM0 : 1.1);
-      add(CHK.mk({ grp, name: 'Steel deck bending between the secondaries', clause: 'EN 1993-1-3 6.1.4 with the effective W_s per metre from the manufacturer', Ed: M, Rd: MRd, unit: 'N·mm/mm', fmt: v => v, basis: 'user', steps: [s('W_s', 'user (manufacturer)', +I.d_W, 'mm³/m')] }));
-      const def = 5 * wS * span ** 4 / (384 * (R.E || 210000) * Im);
-      add(CHK.mk({ grp, name: 'Steel deck deflection', clause: 'EN 1993-1-3 7.3', Ed: def, Rd: dlim, unit: 'mm', fmt: v => v, basis: 'user' }));
+      add(CHK.pending({ grp, name: 'Steel deck bending between the secondaries', clause: 'IS 801 (not supplied)', Ed: M, unit: 'N·mm/mm', fmt: v => v, steps: [s('W_s', 'user (manufacturer)', +I.d_W, 'mm³/m')] }, 'The resistance of a cold-formed deck needs IS 801, which is not implemented.'));
+      const def = 5 * wS * span ** 4 / (384 * (R.E || 200000) * Im);
+      add(CHK.mk({ grp, name: 'Steel deck deflection', clause: 'project limit', Ed: def, Rd: dlim, unit: 'mm', fmt: v => v, basis: 'user' }));
     } else {
       const qall = +I.d_qall;
       add(CHK.mk({ grp, name: typ === 'grating' ? 'Grating capacity for the span (manufacturer load table)' : 'Surface capacity (user)', clause: 'Manufacturer load table / user value', Ed: wU * 1e3, Rd: qall > 0 ? qall : NaN, unit: 'kN/m²', fmt: v => v, basis: qall > 0 ? 'user' : 'none', note: qall > 0 ? '' : 'Enter the design capacity of the surface for this span.' }));
@@ -43,41 +45,13 @@ export const RST: any = (() => {
   }
 
   // ---------- surface / decking: restraint to a secondary (or main beam) ----------
-  // EN 1993-1-1 BB.2.1 (eq. BB.2) / EN 1993-1-3 10.1.1(6): S ≥ (E I_w π²/L² + G I_t + E I_z π²/L² 0.25 h²) 70/h²
+  // The criterion for a surface to be credited as a lateral / torsional restraint of a cold-formed member came from the removed design route. IS 800 has no verified
+  // equivalent: the demand is reported, nothing is credited, so the member is checked without surface restraint.
   function deckRestraint(x) {
     const { R, I, mem, L, label, MEd, sbSpacing, nLines } = x, checks = [], add = c => { checks.push(c); return c; }, grp = `Surface restraint – ${label}`;
-    const E = mem.E, G = E / (2 * (1 + mem.nu)), g = mem.g, h = mem.p.H;
-    const Sreq = (E * g.Iw * Math.PI ** 2 / L ** 2 + G * g.It + E * g.Izz * Math.PI ** 2 / L ** 2 * 0.25 * h * h) * 70 / (h * h);
-    const basis = I.d_basis, Sp = +I.d_S > 0 ? +I.d_S * 1e3 : NaN;
     const present = I.d_type !== 'none';
-    const cS = add(CHK.mk({ grp, name: 'Shear stiffness of the surface ≥ required (full lateral restraint)', clause: 'EN 1993-1-1 BB.2.1 (eq. BB.2); EN 1993-1-3 10.1.1(6)', Ed: Sreq, Rd: Sp, unit: 'kN', fmt: kN, basis: basis === 'none' || !(Sp > 0) ? 'none' : 'user',
-      steps: [s('S_req', '(E I_w π²/L² + G I_t + E I_z π²/L² · 0.25 h²) · 70/h²', kN(Sreq), 'kN'), s('S_provided', `user (${basis})`, kN(Sp), 'kN')], note: basis === 'none' ? 'Restraint data not demonstrated.' : '',
-      why: 'The surface is not stiff enough in shear to hold the compression flange.', fix: 'Stiffer surface / more fixings, or demonstrate S by test or manufacturer data.' }));
-    // fastener force: stabilising force of the compression flange (EN 1993-1-1 5.3.3, e0 = L/500) + spring force from the torsion model
-    const Nf = MEd / (h - mem.p.t), qd = Nf * 8 * (L / 500) / (L * L); // N/mm
-    const sf = +I.d_fs, nf = Math.round(+I.d_fn), Fspring = (x.latCmax || 0) * sf, FEd = (qd * sf + Fspring) / nf;
-    let FRd = +I.d_fv > 0 ? +I.d_fv * 1e3 : NaN, fSteps = [], fClause = 'Fastener shear resistance (manufacturer)', fBasis = +I.d_fv > 0 ? 'user' : 'none';
-    if (I.d_fx === 'screw' && I.d_type === 'steel') {
-      const t = +I.d_t, t1 = mem.p.t, d = +I.d_fd, al = t1 >= 2.5 * t ? 2.1 : Math.min(2.1, 3.2 * Math.sqrt(t / d)), Fb = al * +I.d_fu * d * t / (R.code === 'EN' ? R.gM2 : 1.25);
-      fSteps.push(s('α', t1 >= 2.5 * t ? 't_1 ≥ 2.5 t' : '3.2 √(t/d) ≤ 2.1', al), s('F_b,Rd', 'α f_u d t / γM2 (deck sheet)', kN(Fb), 'kN'));
-      FRd = isFinite(FRd) ? Math.min(FRd, Fb) : Fb; fClause = 'EN 1993-1-3 Table 8.2 (bearing) and manufacturer shear'; fBasis = 'code';
-      if (!(+I.d_fv > 0)) fSteps.push(s('note', 'screw shear F_v,Rd not entered: bearing only (screw shear must exceed 1.2 F_b,Rd – verify)', '', ''));
-    }
-    const cF = add(CHK.mk({ grp, name: 'Surface fixings: restraint force per fastener', clause: fClause + '; force from EN 1993-1-1 5.3.3 (e_0 = L/500) + torsion-model spring force', Ed: FEd, Rd: FRd, unit: 'kN', fmt: kN, basis: fBasis,
-      steps: [s('N_f', 'M_Ed / (h − t)', kN(Nf), 'kN'), s('q_d', '8 N_f e_0 / L²', qd, 'N/mm'), s('spring force', 'from the torsion model (load eccentricity)', x.latCmax || 0, 'N/mm'), s('F_Ed', '(q_d + q_spring) s / n', kN(FEd), 'kN'), ...fSteps] }));
-    const anch = I.d_anch === 'yes', Ftot = (qd * L + (x.latCmax || 0) * L) * (nLines || 1) / 2;
-    const cA = add(CHK.mk({ grp, name: 'Diaphragm anchorage to a braced bay / rigid support', clause: 'Load path check (user capacity)', Ed: Ftot, Rd: anch ? +I.d_anR * 1e3 : 0, unit: 'kN', fmt: kN, basis: anch ? 'user' : 'code', note: anch ? '' : 'The diaphragm is not anchored: the restraint cannot be credited.' }));
-    const lateral = present && basis !== 'none' && cS.status === 'PASS' && cF.status === 'PASS' && cA.status === 'PASS';
-    // torsional restraint C_D (EN 1993-1-3 10.1.5.2): only with a C_D,A from test / manufacturer
-    const CDA = +I.d_CDA > 0 ? +I.d_CDA * 1e3 : NaN; // kNm/m/rad → N·mm/rad per mm
-    const Ieff = (+I.d_I || 0) / 1000, CDC = 2 * E * Ieff / (sbSpacing || 1000);
-    const CD = isFinite(CDA) && CDC > 0 ? 1 / (1 / CDA + 1 / CDC) : NaN;
-    const tors = lateral && isFinite(CD);
-    add(CHK.mk({ grp, name: 'Torsional restraint from the surface (C_D)', clause: 'EN 1993-1-3 10.1.5.2 (C_D = 1/(1/C_D,A + 1/C_D,C), C_D,C = k E I_eff/s, k = 2 – verify)', eta: 0, basis: isFinite(CD) ? 'user' : 'none', review: false,
-      steps: [s('C_D,A', 'test / manufacturer', isFinite(CDA) ? CDA / 1e3 : '–', 'kNm/m/rad'), s('C_D,C', '2 E I_s / s', CDC / 1e3, 'kNm/m/rad'), s('C_D', '', isFinite(CD) ? CD / 1e3 : '–', 'kNm/m/rad')],
-      note: tors ? 'Credited as a continuous torsional spring in the LTB / torsion model.' : 'Not credited: ' + (!isFinite(CDA) ? 'C_D,A not supplied from test or manufacturer data.' : 'lateral restraint not demonstrated.') }));
-    if (!tors) checks[checks.length - 1].status = 'N/A', checks[checks.length - 1].naReason = checks[checks.length - 1].note;
-    return { checks, lateral, tors, k: KRIGID, CD, Sreq, Sp, present, status: lateral ? (tors ? 'Lateral + torsional restraint demonstrated' : 'Lateral restraint demonstrated (torsional not credited)') : present ? 'Present but NOT demonstrated – not credited' : 'None' };
+    add(CHK.pending({ grp, name: 'Lateral and torsional restraint of the member by the surface', clause: '', note: 'The restraint is NOT credited: the member is analysed with the supports and the other demonstrated restraints only.' }, NEEDSURF));
+    return { checks, lateral: false, tors: false, k: KRIGID, CD: NaN, Sreq: NaN, Sp: NaN, present, status: present ? 'Present but NOT demonstrated – not credited (no verified IS 800 criterion)' : 'None' };
   }
 
   // ---------- section properties of small members (angles, boxes) ----------
@@ -93,43 +67,109 @@ export const RST: any = (() => {
   }
   function box(b, h, t) { const A = b * h - (b - 2 * t) * (h - 2 * t), I = (b * h ** 3 - (b - 2 * t) * (h - 2 * t) ** 3) / 12, Iz = (h * b ** 3 - (h - 2 * t) * (b - 2 * t) ** 3) / 12; return { A, Iy: I, Iz, iv: Math.sqrt(Math.min(I, Iz) / A), Wel: I / (h / 2) }; }
 
-  // AISC 360-16 Appendix 6.3.2a nodal brace for beams: P_br = 0.02 M_r C_d / h_o, β_br = (1/φ) 10 M_r C_d / (L_br h_o), φ = 0.75
-  function nodalBrace(Mr, ho, Lbr) { return { Pbr: 0.02 * Mr / ho, beta: 10 * Mr / (Lbr * ho) / 0.75 }; }
-
-  // ---------- joist beams ----------
+  // ---------- joist beams as lateral restraints of a secondary (IS 800:2007 8.3.4, 10.3) ----------
+  // The joist is credited as a lateral restraint ONLY when every required check is verified and satisfied (mode "verified"), or as a USER-DEFINED assumption
+  // with a written justification (mode "user", labelled; never an IS 800 result). Required checks:
+  //   1 restraint force (8.3.4, 8.3.4.1)       2 load path to the lateral supports: anchorage present and its capacity (8.3.4)
+  //   3 position of the restraint on the compression flange (8.3.4)
+  //   4 joist member under the restraint force and its load: verified for rectangular hollow sections (7.1.2, 8.2.1.2, 8.4.1, 9.3), pending otherwise
+  //   5 joist connection: bolt shear, bearing on the joist, tension-free (10.3.2-10.3.4) and the geometry (10.2.2, 10.2.4.2); the bearing on the cold-formed
+  //     secondary needs IS 801 and is pending
+  //   6 stiffness: IS 800 8.3.4 gives no numerical criterion: the actual spring stiffness (joist axial stiffness in series with the two connections and the
+  //     anchorage, all entered) is used in the elastic buckling analysis; with an unknown stiffness the restraint cannot be modelled and is not credited.
   function joists(x) {
     const { R, I, sec, Lsb, Lj, MEdSB, hSB } = x, checks = [], add = c => { checks.push(c); return c; }, grp = 'Joist beams';
     const n = Math.round(+I.j_n);
     if (n <= 0) return { checks, n: 0, positions: [], credited: false, k: 0 };
-    // joists at a from each end and equally spaced between (one joist: mid-span); restraint spacing = largest unbraced segment
-    const a = Math.min(+I.j_aL, Lsb / 2), SJ = n > 1 ? (Lsb - 2 * a) / (n - 1) : Lsb / 2, positions = n === 1 ? [Lsb / 2] : U.range(n, i => a + i * SJ);
+    const E = R.E, a = Math.min(+I.j_aL, Lsb / 2), SJ = n > 1 ? (Lsb - 2 * a) / (n - 1) : Lsb / 2, positions = n === 1 ? [Lsb / 2] : U.range(n, i => a + i * SJ);
     const Lbr = n === 1 ? Lsb / 2 : Math.max(a, SJ);
-    const b = +I.j_b, h = +I.j_h, t = +I.j_t, fy = +I.j_fy, fu = +I.j_fu, E = +I.E;
-    const gp = I.j_sec === 'box' ? box(b, h, t) : I.j_sec === 'C' ? { A: SEC.gross({ H: h, Bt: b, Bb: b, Ct: Math.min(15, b / 3), Cb: Math.min(15, b / 3), t, r: t }, 'single').A } : angle(b, h, t);
-    if (I.j_sec === 'C') { const g = SEC.gross({ H: h, Bt: b, Bb: b, Ct: Math.min(15, b / 3), Cb: Math.min(15, b / 3), t, r: t }, 'single'); Object.assign(gp, { Iy: g.Iyy, iv: Math.sqrt(g.Izz / g.A), Wel: g.Wy }); }
-    const g0 = R.code === 'EN' ? R.gM0 : 1.1, g1 = R.code === 'EN' ? R.gM1 : 1.1, g2 = R.code === 'EN' ? R.gM2 : 1.25;
-    const brace = nodalBrace(MEdSB, hSB, Lbr);
-    const NEd = brace.Pbr, q = +I.j_q, Mq = q * Lj * Lj / 8 + gp.A * 7850e-9 * 9.81 * 1.35 * Lj * Lj / 8;
-    const lam = Lj / gp.iv / (Math.PI * Math.sqrt(E / fy)), ch = MEM.chi(lam, 0.34), Nb = ch * gp.A * fy / g1;
-    const e = I.j_sec === 'L' ? Math.max(gp.zc || 0, gp.yc || 0) : 0, Mecc = NEd * e;
-    const MRd = gp.Wel * fy / g0;
-    add(CHK.mk({ grp, name: 'Joist: brace force in compression + bending (eccentric single-leg connection)', clause: 'AISC 360-16 App. 6.3.2a (P_br) with EN 1993-1-1 6.3.1 (curve b, i_min) and a linear N + M interaction (documented approximation)', eta: NEd / Nb + (Mecc + Mq) / MRd, basis: 'approx',
-      steps: [s('P_br', '0.02 M_r / h_o', kN(NEd), 'kN'), s('L_J', '', Lj, 'mm'), s('λ̄', 'L/(i_min π √(E/f_y))', lam), s('N_b,Rd', 'χ A f_y/γM1', kN(Nb), 'kN'), s('M (eccentricity + load)', '', kNm(Mecc + Mq), 'kNm')] }));
-    const d = +I.j_d, d0 = d <= 14 ? d + 1 : d + 2, nb = Math.round(+I.j_nb);
-    const P = RES.provider(R), bs = P.boltShear(d, I.j_bg, 1, true), bb = P.bearingPlate(d, d0, t, fu, I.j_bg, +I.j_e1, Math.min(b, h) / 2, 0, 0);
-    add(CHK.mk({ grp, name: 'Joist end bolts: shear and bearing', clause: bs.clause + '; ' + bb.clause, Ed: NEd / nb, Rd: Math.min(bs.Rd, bb.Rd), unit: 'kN', fmt: kN, steps: [...bs.steps, ...bb.steps] }));
-    const bThin = P.bearingThin(d, d0, sec.p.t, sec.fu, 3 * d0, 1.5 * d0, 0, 0);
-    add(CHK.mk({ grp, name: 'Bearing of the joist bolt on the secondary flange / web', clause: bThin.clause, Ed: NEd / nb, Rd: bThin.Rd, unit: 'kN', fmt: kN, basis: bThin.basis || 'code', steps: bThin.steps }));
-    // stiffness: joist axial EA/L in series with the bolt slip stiffness
-    const kb = CONN.stiffBolt(d, I.j_bg, t, fu, sec.p.t, sec.fu, E, +I.j_e1, 3 * d);
-    const kJ = 1 / (1 / (E * gp.A / Lj) + 1 / (nb * kb.K) + 1 / (nb * kb.K));
-    add(CHK.mk({ grp, name: 'Joist restraint stiffness vs. full-bracing requirement (information)', clause: 'AISC 360-16 App. 6.3.2a (β_br); the LTB model uses the actual K_J', eta: brace.beta / kJ, basis: 'num', review: false,
-      steps: [s('K_J', '1/(L/EA + 2/(n K_b))', kJ, 'N/mm'), s('β_br (full bracing)', '10 M_r/(φ L_br h_o)', brace.beta, 'N/mm')], note: 'Below the full-bracing stiffness the joists still act as elastic springs in the LTB eigen-analysis (partial restraint).' }));
-    checks[checks.length - 1].status = 'PASS'; // informational: stiffness enters the buckling model directly
-    const anchored = I.j_anch !== 'none';
-    const strengthOK = checks.slice(0, 3).every(c => c.status === 'PASS');
-    const credited = anchored && strengthOK;
-    return { checks, n, positions, SJ, Lbr, a, credited, k: kJ, at: I.j_at, reason: !anchored ? 'joist lines not anchored' : !strengthOK ? 'joist strength not demonstrated' : 'demonstrated', gp };
+    const b = +I.j_b, h = +I.j_h, t = +I.j_t, fy = +I.j_fy, fu = +I.j_fu;
+    const items = []; // [verdict, ...] of the verified-mode checks
+    const note = []; const miss = [];
+    const rec = (c, req = true) => { add(c); if (req) items.push(c.status); return c; };
+
+    // 1 restraint force (8.3.4)
+    const Fcf = Math.max(0, MEdSB) / hSB, dem = RD.restraintDemand({ Fcf, n });
+    rec(CHK.mk({ grp, name: 'Restraint force per joist (2.5 % of the compression-flange force, at least 1 % per point)', clause: 'IS 800:2007 8.3.4', basis: 'code', Ed: dem.perPoint, unit: 'kN', fmt: kN, eta: 0,
+      steps: [s('M_Ed', 'secondary, factored', kNm(MEdSB), 'kNm'), s('F_cf', 'M_Ed / (H − t)', kN(Fcf), 'kN'), s('2.5 % F_cf', '', kN(dem.total), 'kN'), s('per point', `max(2.5 % F_cf / ${n}; 1 % F_cf)`, kN(dem.perPoint), 'kN'), s('to the lateral supports', 'n × per point (8.3.4.1: one beam of the series)', kN(dem.anchorage), 'kN')],
+      eq: 'F_R = max(0.025 F_cf / n; 0.010 F_cf)', note: 'Demand only (the value is the restraint force the joist, its connection and the anchorage must carry).' }));
+
+    // 2 load path
+    const anch = I.j_anch;
+    if (anch === 'none') rec(CHK.mk({ grp, name: 'Load path: joist lines anchored to a bracing system or robust structure', clause: 'IS 800:2007 8.3.4', basis: 'code', eta: Infinity, note: 'Not anchored: parallel members connected only to each other would depend on each other for the restraint, which 8.3.4 does not allow.', why: 'Without an anchorage there is no lateral support for the restraint force.', fix: 'Anchor the joist lines to a braced bay or to the knee-braced end beams and enter its capacity.' }));
+    else {
+      const cap = +I.j_anR > 0 ? +I.j_anR * 1e3 : NaN;
+      if (!(cap > 0)) { miss.push('anchorage capacity'); rec(CHK.pending({ grp, name: 'Load path: capacity of the anchorage (braced bay / knee-braced end beams)', clause: 'IS 800:2007 8.3.4', Ed: dem.anchorage, unit: 'kN', fmt: kN }, 'Enter the capacity of the anchorage (kN, from its own verified design): it is not assumed.')); }
+      else rec(CHK.mk({ grp, name: 'Load path: capacity of the anchorage (braced bay / knee-braced end beams)', clause: 'IS 800:2007 8.3.4', basis: 'code', Ed: dem.anchorage, Rd: cap, unit: 'kN', fmt: kN, steps: [s('anchorage', 'input, from a separate design', kN(cap), 'kN')], eq: 'n F_R ≤ R_anchorage', why: 'The restraint force cannot reach the lateral supports.', fix: 'Stronger anchorage or fewer restraint points.' }));
+    }
+
+    // 3 position
+    if (I.j_at === 'top') rec(CHK.mk({ grp, name: 'Position of the restraint: at the compression flange', clause: 'IS 800:2007 8.3.4', basis: 'code', eta: 0, note: 'Connected to the top flange (the compression flange in sagging). Hogging regions are not covered.' }));
+    else rec(CHK.pending({ grp, name: 'Position of the restraint: at the compression flange', clause: 'IS 800:2007 8.3.4' }, 'The restraint must be as close to the compression flange as practicable unless a torsional restraint of the section is demonstrated, which is not available here.'));
+
+    // 4 joist member
+    const boxJ = I.j_sec === 'box';
+    let gp; let A;
+    if (boxJ) {
+      const geom = { b, h, t, rOuter: 2 * t, rInner: t }, pr = RD_IS.rhsProps(geom); A = pr.A;
+      const kLj = +I.j_k > 0 ? +I.j_k * Lj : NaN;
+      const q = +I.j_q, sw = A * 7850e-9 * 9.80665, wU = q + 1.5 * sw, Mq = wU * Lj * Lj / 8, Vq = wU * Lj / 2;
+      const st = (xx, M, V) => ({ x: xx, N: -dem.perPoint, Vy: 0, Vz: V, T: 0, My: M, Mz: 0 });
+      const res = designHollowMember({ memberId: 0, combination: 'joist', geom, material: { fy, fu, E }, manufacture: 'hollow-cold-formed', length: Lj, KLy: kLj, KLz: kLj, stations: [st(0, 0, Vq), st(Lj / 2, Mq, 0), st(Lj, 0, Vq)], cm: 'table' });
+      for (const ch of res.checks) {
+        const u = ch.unit === 'N' ? ['kN', kN] : ch.unit === 'N·mm' ? ['kNm', kNm] : [ch.unit, v => v];
+        const o = { grp, name: 'Joist member: ' + ch.name, clause: ch.clause, steps: Object.entries(ch.detail || {}).map(([k, v]) => s(k, '', v)), note: (ch.notes || []).join(' ') };
+        if (ch.status === 'pending') rec(CHK.pending(o, (ch.notes || []).join(' ')));
+        else rec(CHK.mk(Object.assign(o, ch.Ed !== null && ch.Rd !== null ? { Ed: ch.Ed, Rd: ch.Rd, unit: u[0], fmt: u[1] } : { eta: ch.ratio })));
+      }
+      if (!res.checks.length) rec(CHK.pending({ grp, name: 'Joist member', clause: 'IS 800:2007 7.1.2' }, res.notes.join(' ')));
+      if (!(kLj > 0)) miss.push('joist effective length factor');
+      rec(CHK.mk({ grp, name: 'Joist member: assumptions', clause: '', review: true, note: 'Simply supported joist; effective length = k × span with k entered by you (IS 800 7.2 / Table 11 is not verified); cold-formed hollow section (buckling class b, outer radius 2 t assumed); self-weight factor 1.5; no connection eccentricity.' }));
+      gp = { A, iv: Math.sqrt(Math.min(pr.Iy, pr.Iz) / A), Wel: Math.min(pr.Zey, pr.Zez) };
+    } else {
+      gp = I.j_sec === 'C' ? { A: SEC.gross({ H: h, Bt: b, Bb: b, Ct: Math.min(15, b / 3), Cb: Math.min(15, b / 3), t, r: t }, 'single').A } : angle(b, h, t);
+      A = gp.A;
+      miss.push('joist member');
+      rec(CHK.pending({ grp, name: 'Joist member: strength under the restraint force and its load', clause: I.j_sec === 'C' ? 'IS 801 (not supplied)' : 'IS 800:2007 7.5', Ed: dem.perPoint, unit: 'kN', fmt: kN }, I.j_sec === 'C' ? 'A cold-formed joist needs IS 801, which is not implemented.' : 'Angle struts (IS 800 7.5) are pending in the code register; only rectangular hollow-section joists are verified.'));
+    }
+
+    // 5 connection
+    const d = +I.j_d, nb = Math.round(+I.j_nb), P1 = +I.j_p > 0 ? +I.j_p : 0, bolt = { d, fub: MEM.boltFu(I.j_bg), fyb: MEM.boltFy(I.j_bg), An: MEM.boltAs(d), Asb: Math.PI * d * d / 4 };
+    const geo = RD.boltGeometry({ d, pitch: nb > 1 ? P1 : undefined, e1: +I.j_e1, edge: 'rolled' });
+    if (!geo.ok && geo.d0 === null) rec(CHK.pending({ grp, name: 'Joist end bolts: hole clearance and geometry', clause: 'IS 800:2007 10.2.1' }, geo.messages.join('; ')));
+    else rec(CHK.mk({ grp, name: 'Joist end bolts: spacing and end distance', clause: 'IS 800:2007 10.2.2, 10.2.4.2', basis: 'code', eta: geo.ok ? 0 : Infinity, note: geo.ok ? `d_0 = ${geo.d0} mm (Table 19); pitch ≥ 2.5 d, end distance ≥ 1.5 d_0 (rolled / machine-cut edges assumed).` : geo.messages.join('; ') + '.', fix: 'Increase the end distance / pitch.' }));
+    if (geo.d0 !== null) {
+      const lj = nb > 1 ? (nb - 1) * P1 : 0, sh = RD.boltShearCapacity(bolt, { nn: 1, ns: 0, lj, lg: t });
+      const Fb = dem.perPoint / nb;
+      rec(CHK.mk({ grp, name: 'Joist end bolts: shear (single shear plane through the threads)', clause: 'IS 800:2007 10.3.2, 10.3.3', basis: 'code', Ed: Fb, Rd: sh.Vdsb, unit: 'kN', fmt: kN,
+        steps: [s('f_ub', '', bolt.fub, 'N/mm²'), s('A_nb', 'net tensile stress area', bolt.An, 'mm²'), s('V_nsb', 'f_ub A_nb / √3', kN(sh.Vnsb), 'kN'), s('β_lj, β_lg', '10.3.3.1, 10.3.3.2', `${U.fmt(sh.betaLj, 3)}, ${U.fmt(sh.betaLg, 3)}`), s('V_dsb', 'V_nsb β_lj β_lg / γ_mb', kN(sh.Vdsb), 'kN'), s('F per bolt', 'F_R / n_b', kN(Fb), 'kN')], eq: 'V_sb ≤ V_dsb = f_ub A_nb / (√3 γ_mb)', note: sh.notes.join(' '), why: 'The bolt shears.', fix: 'Larger or more bolts.' }));
+      const bj = RD.boltBearingCapacity(bolt, { e: +I.j_e1, pitch: nb > 1 ? P1 : undefined, d0: geo.d0, t, fu });
+      rec(CHK.mk({ grp, name: 'Joist end bolts: bearing on the joist wall', clause: 'IS 800:2007 10.3.4', basis: 'code', Ed: Fb, Rd: bj.Vdpb, unit: 'kN', fmt: kN,
+        steps: [s('k_b', 'min(e/3d_0; p/3d_0 − 0.25; f_ub/f_u; 1)', bj.kb), s('V_dpb', '2.5 k_b d t f_u / γ_mb (one wall, t = joist thickness)', kN(bj.Vdpb), 'kN')], eq: 'V_sb ≤ V_dpb', why: 'The joist wall bears at the hole.', fix: 'Thicker joist wall, larger end distance.' }));
+      const ts = sec.p.t;
+      rec(CHK.pending({ grp, name: 'Joist end bolts: bearing and tear-out on the secondary (cold-formed)', clause: 'IS 801 (not supplied)', Ed: Fb, unit: 'kN', fmt: kN, steps: [s('t of the secondary', '', ts, 'mm')] }, 'The bearing of a bolt on cold-formed thin material needs IS 801, which is not implemented.'));
+      miss.push('secondary-side bearing (IS 801)');
+    }
+
+    // 6 stiffness (modelled)
+    const Kc = +I.j_Kc > 0 ? +I.j_Kc * 1e3 : NaN, Ka = +I.j_Ka > 0 ? +I.j_Ka * 1e3 : NaN;
+    const kJ = isFinite(Kc) && isFinite(Ka) ? 1 / (Lj / (E * A) + 2 / Kc + 1 / Ka) : NaN;
+    if (isFinite(kJ)) add(CHK.mk({ grp, name: 'Restraint stiffness K_J (modelled in the elastic buckling analysis; no numerical criterion in IS 800 8.3.4)', clause: 'IS 800:2007 8.3.4', basis: 'num', eta: 0,
+      steps: [s('E A / L_J', 'joist axial stiffness', E * A / Lj / 1e3, 'kN/mm'), s('K_c', 'connection, each end (input)', Kc / 1e3, 'kN/mm'), s('K_a', 'anchorage (input)', Ka / 1e3, 'kN/mm'), s('K_J', '1/(L/EA + 2/K_c + 1/K_a)', kJ / 1e3, 'kN/mm')], note: 'IS 800 8.3.4 requires "sufficient stiffness" without a number: the actual K_J is used as a spring in the buckling analysis; a stiffness that is too low simply gives a lower M_cr.' }));
+    else { miss.push('restraint stiffness data'); rec(CHK.pending({ grp, name: 'Restraint stiffness K_J (joist, its two connections and the anchorage)', clause: 'IS 800:2007 8.3.4' }, 'Enter the axial stiffness of one joist connection K_c and of the anchorage K_a (kN/mm): a restraint of unknown stiffness cannot be modelled and is not assumed rigid.')); }
+
+    const userMode = I.j_cred === 'user';
+    const allOK = items.every(v => v === 'PASS');
+    const anyFail = items.some(v => v === 'FAIL');
+    let credited = false, reason;
+    if (anch === 'none') reason = 'joist lines not anchored (IS 800 8.3.4)';
+    else if (userMode) {
+      credited = String(I.j_credJ || '').trim().length > 0 && anch !== 'none';
+      reason = credited ? 'USER-DEFINED assumption (not an IS 800 result): ' + String(I.j_credJ).trim() + (isFinite(kJ) ? ` (K_J = ${U.fmt(kJ / 1e3, 2)} kN/mm)` : ' (stiffness unknown: rigid)') : 'user-defined restraint without a justification: not credited';
+      add(CHK.mk({ grp, name: 'User-defined joist restraint', clause: '', review: true, note: 'The restraint is credited by the designer\'s assumption: ' + reason + '. Failing or pending checks above are NOT resolved by it.' }));
+    } else if (allOK && isFinite(kJ)) { credited = true; reason = 'every required IS 800 check is verified and satisfied'; }
+    else reason = anyFail ? 'a verified check is not satisfied' : 'not verified: ' + [...new Set(miss)].join(', ');
+    return { checks, n, positions, SJ, Lbr, a, credited, k: isFinite(kJ) ? kJ : (userMode && credited ? KRIGID : 0), at: I.j_at, reason, gp, mode: userMode ? 'user' : 'verified', demand: dem, kJ };
   }
 
   // ---------- knee braces ----------
@@ -138,10 +178,7 @@ export const RST: any = (() => {
     if (I.k_use !== 'yes') return { checks, use: false, H: 0, N: 0, Mcol: 0 };
     const th = +I.k_th * Math.PI / 180, a = +I.k_a, dv = a * Math.tan(th), Lkb = a / Math.cos(th);
     // notional horizontal force per column at beam level
-    let phi, phiTxt;
-    if (R.code === 'EN') { const ah = U.clamp(2 / Math.sqrt(hc / 1000), 2 / 3, 1), am = Math.sqrt(0.5 * (1 + 1 / Math.max(1, nCols))); phi = ah * am / 200; phiTxt = `φ = φ_0 α_h α_m = (1/200)·${U.fmt(ah, 3)}·${U.fmt(am, 3)} (EN 1993-1-1 5.3.2(3))`; }
-    else if (R.code === 'AISI') { phi = 0.002; phiTxt = 'N_i = 0.002 Y_i (AISC 360-16 C2.2b)'; }
-    else { phi = 0.005; phiTxt = '0.5 % of the factored gravity load (IS 800:2007 4.3.6)'; }
+    const phi = 0.005, phiTxt = '0.5 % of the factored gravity load (IS 800:2007 4.3.6)';
     const H = phi * Ncol + +I.k_H * 1e3;
     const ga = x.ga || null; // global analysis (unified app): brace forces from the frame model, compression and tension separately
     // gravity compression from the beam model with the knee supports (engine v1.6; not with the global analysis, which gives N itself)
@@ -149,42 +186,31 @@ export const RST: any = (() => {
     const Fh = H * hc / dv, N = ga ? ga.Nc : Fh / Math.cos(th) + Ng, Nt = ga ? ga.Nt : Fh / Math.cos(th), Mcol = H * (hc - dv);
     const nL = +I.k_nL, b = +I.k_b, h = +I.k_h, t = +I.k_t, fy = +I.k_fy, fu = +I.k_fu, E = +I.E;
     const A1 = angle(b, h, t), A = nL * A1.A;
-    const g0 = R.code === 'EN' ? R.gM0 : 1.1, g1 = R.code === 'EN' ? R.gM1 : 1.1, g2 = R.code === 'EN' ? R.gM2 : 1.25;
     const d = +I.k_d, d0 = d <= 14 ? d + 1 : d + 2, nb = Math.round(+I.k_nb), e2 = +I.k_e2 > 0 ? +I.k_e2 : b / 2, p1 = +I.k_p1, e1 = +I.k_e1;
-    // compression: single angle (EN 1993-1-1 BB.1.2 for ≥ 2 bolts) or two angles (buckling about the axis parallel to the connected legs, packing ≤ 15 i_min)
-    let i = nL === 1 ? A1.iv : A1.iy, note = '';
-    if (nL === 2 && +I.k_sp > 15 * A1.iv) { i = A1.iv; note = 'Packing spacing > 15 i_min: each angle checked on its own (EN 1993-1-1 6.4.4).'; }
-    const lam = Lkb / i / (Math.PI * Math.sqrt(E / fy));
-    const lamEff = nL === 1 && nb >= 2 ? 0.35 + 0.7 * lam : lam;
-    const ch = MEM.chi(lamEff, 0.34), Nb = ch * A * fy / g1;
-    const ecc = nL === 1 && nb < 2;
-    const eM = ecc ? N * (A1.zc) / (A1.Wel * fy / g0) : 0;
-    add(CHK.mk({ grp, name: 'Knee brace in compression', clause: nL === 1 ? (nb >= 2 ? 'EN 1993-1-1 6.3.1 with BB.1.2 (λ̄_eff,v = 0.35 + 0.7 λ̄_v)' : 'EN 1993-1-1 6.3.1 + eccentricity moment (one bolt: BB.1.2 not applicable – documented approximation)') : 'EN 1993-1-1 6.3.1 / 6.4.4 (two angles)', eta: N / Nb + eM, basis: ecc ? 'approx' : 'code',
-      steps: [...(ga ? [s('N_Ed', 'global frame analysis: ' + ga.case, kN(N), 'kN')] : [s('H', phiTxt + ' × N + H_add', kN(H), 'kN'), ...(Ng ? [s('R_knee', `largest knee reaction of the ${x.grav.where} model (ULS)`, kN(x.grav.R), 'kN'), s('N_grav', 'R_knee / sin θ', kN(Ng), 'kN'), s('N_Ed', 'H h_c / (d_v cos θ) + N_grav', kN(N), 'kN')] : [s('N_Ed', 'H h_c / (d_v cos θ)', kN(N), 'kN')])]), s('L_KB', 'a / cos θ', Lkb, 'mm'), s('λ̄', '', lamEff), s('χ', 'curve b', ch), s('N_b,Rd', '', kN(Nb), 'kN')], note }));
-    // tension (net section of angles connected by one leg, EN 1993-1-8 3.10.3)
-    const Anet = A1.A - d0 * t, beta = nb === 2 ? U.interp(p1, [2.5 * d0, 5 * d0], [0.4, 0.7]) : U.interp(p1, [2.5 * d0, 5 * d0], [0.5, 0.7]);
-    const Nu = nb === 1 ? 2 * (e2 - 0.5 * d0) * t * fu / g2 : beta * Anet * fu / g2;
-    add(CHK.mk({ grp, name: 'Knee brace in tension (net section, angle connected by one leg)', clause: 'EN 1993-1-8 3.10.3 (eq. 3.11–3.13)', Ed: Nt, Rd: Math.min(nL * Nu, A * fy / g0), unit: 'kN', fmt: kN, basis: R.code === 'EN' ? 'code' : 'approx' }));
-    const P = RES.provider(R), planes = nL === 2 ? 2 : 1, bs = P.boltShear(d, I.k_bg, planes, true), bb = P.bearingPlate(d, d0, t, fu, I.k_bg, e1, e2, nb > 1 ? p1 : 0, 0);
+    // angle struts (IS 800 7.5) and net-section rupture of angles (6.3) are not verified in the code register: the member checks are pending, the demand is reported
+    const demandSteps = ga ? [s('N_Ed', 'global frame analysis: ' + ga.case, kN(N), 'kN')] : [s('H', phiTxt + ' × N + H_add', kN(H), 'kN'), ...(Ng ? [s('R_knee', `largest knee reaction of the ${x.grav.where} model (ULS)`, kN(x.grav.R), 'kN'), s('N_grav', 'R_knee / sin θ', kN(Ng), 'kN'), s('N_Ed', 'H h_c / (d_v cos θ) + N_grav', kN(N), 'kN')] : [s('N_Ed', 'H h_c / (d_v cos θ)', kN(N), 'kN')])];
+    add(CHK.pending({ grp, name: 'Knee brace in compression', clause: 'IS 800:2007 7.5', Ed: N, unit: 'kN', fmt: kN, steps: [...demandSteps, s('L_KB', 'a / cos θ', Lkb, 'mm')] }, 'Angle struts (7.5) are pending in the code register.'));
+    add(CHK.pending({ grp, name: 'Knee brace in tension (net section, angle connected by one leg)', clause: 'IS 800:2007 6.3', Ed: Nt, unit: 'kN', fmt: kN }, 'Rupture of the net section of angles (6.3) is pending in the code register.'));
+        const P = RES.provider(R), planes = nL === 2 ? 2 : 1, bs = P.boltShear(d, I.k_bg, planes, true), bb = P.bearingPlate(d, d0, t, fu, I.k_bg, e1, e2, nb > 1 ? p1 : 0, 0);
     const Nb_ = Math.max(N, Nt);
     add(CHK.mk({ grp, name: 'Knee brace bolts: shear', clause: bs.clause, Ed: Nb_ / nb, Rd: bs.Rd, unit: 'kN', fmt: kN, steps: bs.steps }));
     add(CHK.mk({ grp, name: 'Knee brace bolts: bearing on the angle(s)', clause: bb.clause, Ed: Nb_ / nb / nL, Rd: bb.Rd, unit: 'kN', fmt: kN, steps: bb.steps }));
-    if (nL === 2) { const bg = P.bearingPlate(d, d0, +I.k_tg, 430, I.k_bg, e1, e2, nb > 1 ? p1 : 0, 0); add(CHK.mk({ grp, name: 'Knee brace bolts: bearing on the gusset', clause: bg.clause, Ed: Nb_ / nb, Rd: bg.Rd, unit: 'kN', fmt: kN, steps: bg.steps, note: 'Gusset f_u = 430 N/mm² assumed (S275).' })); }
+    if (nL === 2) { const bg = P.bearingPlate(d, d0, +I.k_tg, 410, I.k_bg, e1, e2, nb > 1 ? p1 : 0, 0); add(CHK.mk({ grp, name: 'Knee brace bolts: bearing on the gusset', clause: bg.clause, Ed: Nb_ / nb, Rd: bg.Rd, unit: 'kN', fmt: kN, steps: bg.steps, note: 'Gusset f_u = 410 N/mm² assumed (E250).' })); }
     return { checks, use: true, H, N, Nt, Ng, Fh, Fv: Fh * Math.tan(th), Mcol, dv, Lkb, phi, a, ga: !!ga };
   }
 
   // ---------- plan and vertical bracing ----------
   function bracing(x) {
     const { R, I, sumNf, nRestr, Lline, Htot, Lmb, Lsb, hc } = x, checks = [], add = c => { checks.push(c); return c; }, grp = 'Bracing', ga = x.ga || null;
-    const P = RES.provider(R), g0 = R.code === 'EN' ? R.gM0 : 1.1, g2 = R.code === 'EN' ? R.gM2 : 1.25;
+    const P = RES.provider(R), g0 = 1.1;
     const memRes = (b, t, typ) => {
       const fy = +I.br_fy, fu = +I.br_fu, d = +I.br_d, d0 = d <= 14 ? d + 1 : d + 2;
       let A, Anet;
       if (typ === 'rod') { A = MEM.boltAs(b) || Math.PI * b * b / 4 * 0.78; Anet = A; }
       else if (typ === 'angle') { A = angle(b, b, t).A; Anet = A - d0 * t; }
       else { A = b * t; Anet = (b - d0) * t; }
-      const Npl = A * fy / g0, Nu = 0.9 * Anet * fu / g2;
-      return { A, Anet, Rd: Math.min(Npl, Nu), steps: [s('A', '', A, 'mm²'), s('N_pl,Rd', 'A f_y/γM0', kN(Npl), 'kN'), s('N_u,Rd', '0.9 A_net f_u/γM2', kN(Nu), 'kN')] };
+      const Npl = A * fy / g0; // IS 800 6.2: yielding of the gross section (verified); rupture of the net section (6.3) is pending
+      return { A, Anet, Rd: Npl, steps: [s('A', '', A, 'mm²'), s('T_dg', 'A f_y/γ_m0', kN(Npl), 'kN')] };
     };
     let qd = 0, Fpl = 0;
     if (I.br_use === 'yes') {
@@ -193,19 +219,20 @@ export const RST: any = (() => {
       const Vb = qd * Lline / 2 / Math.max(1, +I.br_nbay) + (+I.br_H * 1e3) / 2;
       const Ld = Math.hypot(Lmb, Lsb); Fpl = Vb * Ld / Lsb + (ga ? ga.Fplan : 0); // + sway load transferred between the frame lines (global analysis)
       const r = memRes(+I.br_b, +I.br_t, I.br_type);
-      add(CHK.mk({ grp, name: 'Plan bracing diagonal (tension)', clause: 'EN 1993-1-1 5.3.3 (q_d = Σ N_Ed 8 e_0 / L², e_0 = α_m L/500, δ_q = 0) and 6.2.3', Ed: Fpl, Rd: r.Rd, unit: 'kN', fmt: kN, basis: 'approx',
-        steps: [s('Σ N_Ed', 'compression-flange forces restrained by one bracing', kN(sumNf), 'kN'), s('m', 'restrained members', m), s('e_0', 'α_m L/500', e0, 'mm'), s('q_d', '', qd, 'N/mm'), s('F_diag', ga ? `V L_d / L_sb + ${U.fmt(ga.Fplan / 1e3, 2)} kN transferred between the frame lines (global analysis)` : 'V L_d / L_sb', kN(Fpl), 'kN'), ...r.steps], note: 'δ_q (in-plane deflection of the bracing) taken as 0: verify that the bracing is stiff (EN 1993-1-1 5.3.3(2)).' }));
-      const bs = P.boltShear(+I.br_d, I.br_bg, 1, true), bb = P.bearingPlate(+I.br_d, +I.br_d + 1, +I.br_t, +I.br_fu, I.br_bg, 2 * (+I.br_d + 1), (+I.br_b) / 2, 0, 0);
+      add(CHK.pending({ grp, name: 'Plan bracing diagonal (tension)', clause: 'IS 800:2007 6.2', Ed: Fpl, unit: 'kN', fmt: kN,
+        steps: [s('Σ N_Ed', 'compression-flange forces restrained by one bracing', kN(sumNf), 'kN'), s('m', 'restrained members', m), s('e_0', 'α_m L/500', e0, 'mm'), s('q_d', '', qd, 'N/mm'), s('F_diag', ga ? `V L_d / L_sb + ${U.fmt(ga.Fplan / 1e3, 2)} kN transferred between the frame lines (global analysis)` : 'V L_d / L_sb', kN(Fpl), 'kN'), ...r.steps],
+        note: 'The stabilising force of the compression flanges (an assumed initial bow L/500 and the number of restrained members) came from the removed design route and is shown for information only; IS 800 has no verified rule for it, so the bracing member is not checked.' }, 'No verified IS 800 rule for the force in a stability bracing of compression flanges.'));
+            const bs = P.boltShear(+I.br_d, I.br_bg, 1, true), bb = P.bearingPlate(+I.br_d, +I.br_d + 1, +I.br_t, +I.br_fu, I.br_bg, 2 * (+I.br_d + 1), (+I.br_b) / 2, 0, 0);
       add(CHK.mk({ grp, name: 'Plan bracing end bolts', clause: bs.clause, Ed: Fpl / Math.round(+I.br_nb), Rd: Math.min(bs.Rd, bb.Rd), unit: 'kN', fmt: kN, steps: [...bs.steps, ...bb.steps] }));
     } else add(CHK.na({ grp, name: 'Plan bracing', clause: '' }, 'No plan bracing: main-beam restraints through SB-Int lines must be anchored otherwise (wall / diaphragm).'));
     let Fv = 0;
     if (I.vb_use === 'yes') {
       const Ld = Math.hypot(Lmb, hc); Fv = ga && ga.Fv !== null ? ga.Fv : Htot * Ld / Lmb;
       const r = memRes(+I.vb_b, +I.vb_t, 'flat');
-      add(CHK.mk({ grp, name: 'Vertical bracing diagonal (tension only)', clause: 'EN 1993-1-1 5.3.2 notional sway forces + 6.2.3', Ed: Fv, Rd: r.Rd, unit: 'kN', fmt: kN, steps: [...(ga && ga.Fv !== null ? [s('F', 'tension diagonal, global frame analysis: ' + ga.FvCase, kN(Fv), 'kN')] : [s('H', 'notional + additional, per braced line', kN(Htot), 'kN'), s('F', 'H L_d / L', kN(Fv), 'kN')]), ...r.steps] }));
+      add(CHK.mk({ grp, name: 'Vertical bracing diagonal (tension only)', clause: 'IS 800:2007 4.3.6, 6.2', Ed: Fv, Rd: r.Rd, unit: 'kN', fmt: kN, steps: [...(ga && ga.Fv !== null ? [s('F', 'tension diagonal, global frame analysis: ' + ga.FvCase, kN(Fv), 'kN')] : [s('H', 'notional + additional, per braced line', kN(Htot), 'kN'), s('F', 'H L_d / L', kN(Fv), 'kN')]), ...r.steps], note: 'Net-section rupture (IS 800 6.3) is pending: only the yielding of the gross section is checked.' }));
     } else add(CHK.na({ grp, name: 'Vertical bracing', clause: '' }, 'No vertical bracing: frame stability from knee braces / column bending.'));
     return { checks, qd, Fpl, Fv };
   }
-  return { deckVertical, deckRestraint, joists, knee, bracing, angle, box, nodalBrace, KRIGID };
+  return { deckVertical, deckRestraint, joists, knee, bracing, angle, box, KRIGID };
 })();
 

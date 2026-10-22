@@ -107,7 +107,7 @@ export interface SolveOptions {
   lineSearch: boolean;
   /**
    * Second-order theory. 'II' (default): equilibrium on the deformed geometry with LINEAR strains: the geometric term N·G carries P-Δ and P-δ
-   * (EN 1993-1-1 5.2.2 second-order elastic analysis; RSTAB "second order analysis (P-Delta)"). 'vonKarman': adds the quadratic axial strain
+   * (the second-order elastic analysis of IS 800 Annex B; RSTAB "second order analysis (P-Delta)"). 'vonKarman': adds the quadratic axial strain
    * (membrane coupling / axial shortening of bent members), i.e. a consistent total-Lagrangian formulation with an exact tangent.
    */
   theory: 'II' | 'vonKarman';

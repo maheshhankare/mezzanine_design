@@ -1,6 +1,6 @@
 # C-Section Beam System Designer (secure edition)
 
-Design of cold-formed lipped C-section beam systems for storage and racking mezzanines (EN 1990 / EN 1993, AISI/AISC and IS routes):
+Design of cold-formed lipped C-section beam systems for storage and racking mezzanines (design standard: **IS 800:2007 only**; cold-formed member resistances need IS 801, which is not implemented, and are reported as REVIEW):
 floor → surface / decking → SB-Int and SB-End secondaries → connections → main beam → box column → base plate.
 
 This edition is a client–server application: **Next.js (React, TypeScript, Tailwind) on Vercel + PostgreSQL (Neon)**.
@@ -9,6 +9,9 @@ The structural calculation engine runs **only on the server**; the browser recei
 * [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): review of the original application, what moved where, API, database, authentication
 * [`docs/SECURITY.md`](docs/SECURITY.md): what is and is not protected, security checklist, test results, remaining limitations
 * [`docs/DEPLOY.md`](docs/DEPLOY.md): hosting, environment variables, first administrator, backups
+* [`docs/IS800_ONLY_CONVERSION.md`](docs/IS800_ONLY_CONVERSION.md): the application's only design standard is IS 800:2007: what was removed, migration of stored projects, verified and pending provisions, tests, limitations
+* [`docs/IS800_ROUTE.md`](docs/IS800_ROUTE.md), [`docs/IS800_DESIGN.md`](docs/IS800_DESIGN.md), [`docs/CODE_REGISTER.md`](docs/CODE_REGISTER.md): the IS 800 provisions read, implemented and still open
+* [`docs/SECOND_ORDER.md`](docs/SECOND_ORDER.md), [`docs/RSTAB_BENCHMARK.md`](docs/RSTAB_BENCHMARK.md): the second-order frame solver (**Frame analysis (IS 800)** in the project list) and its validation against RSTAB
 
 ## Features
 
@@ -17,7 +20,7 @@ The structural calculation engine runs **only on the server**; the browser recei
 * **Ctrl+S / Ctrl+Shift+S** never offers the page for download: it saves the *project data* to the database and says so only after the server confirms.
 * **Generate PDF Report**: server-generated from the saved, recalculated project (project data, inputs, design basis, member properties, every check with demand / resistance / utilisation / status, warnings, assumptions; page numbers and revision). No equations, source code or UI.
 * **Export / Import project data** (JSON with inputs and results only). There is no option anywhere to download the application source.
-* All 13 tabs of the original tool: inputs, member / connection / column / joist / knee / decking / bracing results, summary and diagnosis, optimisation (server-side search with live progress), DXF drawings.
+* All 13 tabs of the C-section designer: inputs, member / connection / column / joist / knee / decking / bracing results, summary and diagnosis, optimisation (server-side search with live progress), DXF drawings.
 
 ## Local development
 

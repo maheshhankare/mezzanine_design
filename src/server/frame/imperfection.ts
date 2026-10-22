@@ -1,6 +1,6 @@
 import { Prepared } from './model';
-import { NodalLoad, SolveResult } from './types';
-import { routeAvailability, type CodeFeature, type NationalAnnex } from '../../shared/codeRegister';
+import { LoadCase, MemberLoad, NodalLoad, SolveResult } from './types';
+import { routeAvailability } from '../../shared/codeRegister';
 
 /**
  * Imperfections for the second-order frame analysis. Two mechanically equivalent representations, which must never be used together for the
@@ -10,8 +10,8 @@ import { routeAvailability, type CodeFeature, type NationalAnnex } from '../../s
  *    The element formulation carries it only through the geometric term N·G(u+u0): the member is initially crooked, no bending stress.
  *  – 'loads': equivalent horizontal loads. For a sway (lean) imperfection φ0 the pair ±φ0·N at the ends of every compressed column member.
  *
- * The VALUES (φ0, e0/L, which members, which combinations) are user inputs. Code-based values (IS 800, EN 1993-1-1 with a National Annex) are
- * NOT generated here: see `resolveImperfectionSource`, which refuses a code route while the register items are not verified.
+ * The VALUES (φ0, e0/L, which members, which combinations) are user inputs. IS 800:2007 gives no explicit geometric imperfection values for the
+ * frame analysis (only the notional forces of 4.3.6): see `resolveImperfectionSource`.
  */
 
 type V3 = [number, number, number];
@@ -133,60 +133,67 @@ export function swayLoads(ps: Prepared, gravity: SolveResult, memberIds: number[
 
 export type ImperfectionMode = 'loads' | 'geometry';
 export interface ImperfectionSettings {
-  source: 'user' | 'IS800' | 'EN1993';
-  /** sway: user value φ0 [-] (e.g. 0.005 = 1/200) and the way it is introduced ('loads' = notional / equivalent forces) */
-  sway?: { phi0?: number; mode: ImperfectionMode };
-  bow?: { e0OverL?: number; mode: ImperfectionMode };
+  /** sway: 'notional' = the IS 800 4.3.6 notional forces (the only code representation), otherwise a user-defined value */
+  sway?: { mode: 'notional' | ImperfectionMode; source: 'code' | 'user' };
+  /** member bow: IS 800 gives no value for the frame analysis, so it is always user-defined */
+  bow?: { mode: ImperfectionMode };
   /** the same imperfection is ALSO represented by notional / equivalent horizontal loads defined elsewhere (e.g. in a load case) */
   notionalLoadsInLoadCases?: boolean;
-  /** National Annex of the project (EN route) */
-  annex?: NationalAnnex | null;
-  /** EN route without a verified Annex: accept the values printed in the Eurocode text (the run is then provisional) */
-  acceptEurocodeTextValues?: boolean;
 }
 
 export interface ImperfectionCheck {
-  /** false: the settings cannot be used (a code route whose provisions are pending, or a method the code does not provide) */
+  /** false: the settings cannot be used (a method that IS 800 does not provide as a code value) */
   allowed: boolean;
-  /** how the result must be labelled */
-  label: 'verified' | 'provisional' | 'user-defined' | 'blocked';
+  label: 'provisional' | 'user-defined' | 'blocked';
   blocked: string[];
   warnings: string[];
 }
 
 /**
- * Decides, per feature, whether the requested imperfections can be produced under the chosen standard. Only the affected route is blocked; the
- * register (src/shared/codeRegister.ts) is the source of truth. Code values are never invented: IS 800 has no explicit geometric imperfection
- * provisions in the frame analysis (only the notional forces of 4.3.6); EN 1993-1-1 values are National choices, so without a verified Annex they are
- * available only as provisional Eurocode-text values the user has accepted.
+ * Decides whether the requested imperfections can be produced under IS 800:2007. Code values are never invented: IS 800 has no explicit geometric imperfection
+ * provisions in the frame analysis (only the notional forces of 4.3.6), so geometry and bow are available as USER-DEFINED values only.
  */
 export function resolveImperfectionSource(s: ImperfectionSettings): ImperfectionCheck {
   const blocked: string[] = [], warnings: string[] = [];
-  let label: ImperfectionCheck['label'] = s.source === 'user' ? 'user-defined' : 'verified';
-  const need = (f: CodeFeature) => {
-    const a = routeAvailability(f);
-    if (a.state === 'blocked') blocked.push(...a.reasons);
-    else if (a.state === 'provisional' && label === 'verified') { label = 'provisional'; warnings.push(...a.reasons.map((r) => `provisional: ${r}`)); }
-  };
-  if (s.source === 'IS800') {
-    if (s.sway) {
-      if (s.sway.mode === 'geometry') blocked.push('IS 800 gives no provisions for an explicit geometric sway imperfection in the frame analysis (4.3.6, 4.4.3, Annex B-2 checked); use the notional forces of 4.3.6 or mark the imperfection user-defined.');
-      else need('is800.notional-loads');
-    }
-    if (s.bow) blocked.push('IS 800 gives no member-bow imperfection value for the frame analysis (member bow enters through the buckling curves of Section 7); mark it user-defined.');
+  let label: ImperfectionCheck['label'] = 'user-defined';
+  if (s.sway) {
+    if (s.sway.source === 'code') {
+      if (s.sway.mode !== 'notional') blocked.push('IS 800 gives no provisions for an explicit geometric sway imperfection or imperfection loads other than the notional forces of 4.3.6; use the notional forces or mark the imperfection user-defined.');
+      else { const a = routeAvailability('is800.notional-loads'); if (a.state === 'blocked') blocked.push(...a.reasons); else { label = 'provisional'; warnings.push(...a.reasons.map((r) => `provisional: ${r}`)); } }
+    } else if (s.sway.mode === 'notional') blocked.push('the notional forces of 4.3.6 are code values: mark the source "code".');
   }
-  if (s.source === 'EN1993') {
-    const annexOk = !!s.annex && s.annex.ndps.length > 0 && s.annex.ndps.every((n) => n.value !== null && n.status === 'verified');
-    if (!annexOk && !s.acceptEurocodeTextValues) blocked.push(s.annex ? `National Annex ${s.annex.country}: NDPs are not all set and verified` : 'no National Annex selected: the EN 1993-1-1 imperfection values are National choices (none is assumed)');
-    else if (!annexOk && label === 'verified') { label = 'provisional'; warnings.push('values printed in the Eurocode text are used (φ0 = 1/200, Table 5.1): provisional until the National Annex of the project is verified'); }
-    if (s.sway) { need('en.sway-imperfection'); if (s.sway.mode === 'loads') need('en.equivalent-forces'); }
-    if (s.bow) need('en.bow-imperfection');
-  }
-  if (s.sway && s.notionalLoadsInLoadCases && s.sway.mode === 'geometry') warnings.push('A geometric sway imperfection and notional / equivalent horizontal loads in the load cases both represent the same effect: they would be counted twice.');
-  if (s.sway && s.sway.mode === 'loads' && s.notionalLoadsInLoadCases) warnings.push('Equivalent sway loads are generated here and notional loads are also in the load cases: the same imperfection would be applied twice.');
-  if (s.source === 'IS800' && s.sway && s.sway.mode === 'geometry') warnings.push('In the IS 800 route a geometric imperfection combined with the notional forces counts the practical imperfections twice.');
-  if (s.source === 'EN1993' && s.sway && s.bow) warnings.push('EN 1993-1-1 5.3.2(6): bow is introduced in addition to sway only for frames sensitive to second-order effects and members meeting (5.8); check en1993BowRequired.');
-  if (s.sway && s.bow && s.sway.mode === 'loads' && s.bow.mode === 'geometry') warnings.push('Sway as loads with bow as geometry: the two representations see the member N differently (frozen vs current); use one representation or document why mixing is intended.');
+  if (s.notionalLoadsInLoadCases && s.sway) warnings.push('Notional / equivalent horizontal loads are already in the load cases and a sway imperfection is generated here: the same imperfection would be applied twice.');
+  if (s.sway?.source === 'user' && s.sway.mode === 'geometry') warnings.push('A user-defined geometric sway together with the IS 800 notional forces counts the practical imperfections twice.');
+  if (s.bow) warnings.push('Member bow is user-defined (IS 800 gives no frame-analysis value); a bow combined with a sway imperfection is a project decision.');
+  if (s.sway?.mode === 'loads' && s.bow?.mode === 'geometry') warnings.push('Sway as loads with bow as geometry: the two representations see the member N differently (frozen vs current); use one representation or document why mixing is intended.');
   if (blocked.length) label = 'blocked';
   return { allowed: blocked.length === 0, label, blocked, warnings };
+}
+
+/**
+ * Equivalent horizontal forces of a bow imperfection e0 of a compressed member (a mechanical equivalence, not a code provision): a uniform load q = 8 N e0/L²
+ * over the length with end forces 4 N e0/L in the opposite sense (they equilibrate q·L), for a PARABOLIC bow. N from a first-order analysis (`gravity`).
+ * `direction` is projected perpendicular to the member axis; the loads act towards the bow. The half-sine geometry of bowGeometry has a different shape
+ * (about 1.5 % apart in the second-order mid moment at P = 0.5 P_cr).
+ */
+export function bowEquivalentLoads(ps: Prepared, gravity: SolveResult, members: { id: number; e0OverL: number }[], direction: V3): { lc: LoadCase; applied: { member: number; N: number; L: number; q: number; endForce: number }[] } {
+  const Ntens = new Map<number, number>();
+  for (const e of gravity.elements) if (!Ntens.has(e.member)) Ntens.set(e.member, e.stations[0][1]);
+  const member: MemberLoad[] = [], nodal: NodalLoad[] = [], applied: { member: number; N: number; L: number; q: number; endForce: number }[] = [];
+  for (const { id, e0OverL } of members) {
+    if (!(e0OverL > 0 && e0OverL <= 0.02)) throw new Error(`member ${id}: e0/L must be in (0, 0.02]`);
+    const m = ps.model.members.find((x) => x.id === id); if (!m) throw new Error(`member ${id} not found`);
+    const a = ps.model.nodes.find((n) => n.id === m.n1)!, b = ps.model.nodes.find((n) => n.id === m.n2)!;
+    const axis = unit([b.x - a.x, b.y - a.y, b.z - a.z]), L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    const N = -(Ntens.get(id) ?? 0);
+    if (!(N > 0)) continue; // only compressed members
+    const d = unit(direction), t = dot(d, axis);
+    const n = unit([d[0] - t * axis[0], d[1] - t * axis[1], d[2] - t * axis[2]]);
+    if (!(n[0] || n[1] || n[2])) throw new Error(`member ${id}: the bow direction is parallel to the member axis`);
+    const e0 = e0OverL * L, q = (8 * N * e0) / (L * L), F = (4 * N * e0) / L;
+    member.push({ member: id, q: [q * n[0], q * n[1], q * n[2]], system: 'global' });
+    nodal.push({ node: m.n1, f: [-F * n[0], -F * n[1], -F * n[2], 0, 0, 0] }, { node: m.n2, f: [-F * n[0], -F * n[1], -F * n[2], 0, 0, 0] });
+    applied.push({ member: id, N, L, q, endForce: F });
+  }
+  return { lc: { id: 'BOW', name: 'equivalent bow forces (parabolic)', member, nodal }, applied };
 }

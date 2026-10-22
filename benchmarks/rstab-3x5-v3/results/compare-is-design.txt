@@ -1,0 +1,19 @@
+CO1: converged
+CO2: converged
+
+box columns, sway C_m, axes y=local y: mine vs RSTAB STEEL IS (absolute difference of the utilisation)
+eq 101 tension 6.2                    n=  99  mean |diff| 0.0025  max 0.0049  worst member 1645 x=500 CO2 (mine 0.155, RSTAB 0.160)
+eq 102 compression 7.1.2 (section)    n= 297  mean |diff| 0.0020  max 0.0051  worst member 2917 x=0 CO2 (mine 0.105, RSTAB 0.110)
+eq 121 shear z 8.4.1                  n= 392  mean |diff| 0.0026  max 0.0050  worst member 52 x=200 CO1 (mine 0.305, RSTAB 0.300)
+eq 123 shear y 8.4.1                  n= 388  mean |diff| 0.0026  max 0.0053  worst member 1274 x=225 CO1 (mine 0.065, RSTAB 0.070)
+eq 181 bending y + shear + N 9.3.1    n= 251  mean |diff| 0.0024  max 0.0056  worst member 1651 x=3500 CO2 (mine 0.356, RSTAB 0.350)
+eq 182                                n= 147  mean |diff| 0.0025  max 0.0058  worst member 2895 x=4000 CO2 (mine 0.824, RSTAB 0.830)
+eq 201 bending z + shear + N 9.3.1    n= 209  mean |diff| 0.0028  max 0.0060  worst member 2361 x=3500 CO1 (mine 0.246, RSTAB 0.240)
+eq 202                                n= 141  mean |diff| 0.0023  max 0.0055  worst member 2222 x=4000 CO1 (mine 0.255, RSTAB 0.250)
+eq 221 biaxial 9.3.1.1/2              n= 390  mean |diff| 0.0025  max 0.0056  worst member 1902 x=0 CO1 (mine 0.276, RSTAB 0.270)
+eq 341 9.3.2.2 (y)                    n= 291  mean |diff| 0.1330  max 0.3541  worst member 2784 x=0 CO1 (mine 0.634, RSTAB 0.280)
+eq 351 9.3.2.2 (z, LTB)               n= 291  mean |diff| 0.0864  max 0.3666  worst member 2895 x=0 CO2 (mine 0.483, RSTAB 0.850)
+
+real	0m26.036s
+user	0m0.015s
+sys	0m0.000s

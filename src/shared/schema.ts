@@ -7,10 +7,10 @@ export const SCHEMA: any = (() => {
   const tb = (id, label) => { tab = id; T.push({ tabDef: true, id, label }); };
   const gp = label => { grp = label; };
   const f = (id, label, type, def, extra = {}) => T.push(Object.assign({ id, label, type, def, tab, grp }, extra));
-  const GRADES = [['S235', 'S235 (EN 10025-2) f_y 235 / f_u 360'], ['S275', 'S275 (EN 10025-2) 275 / 430'], ['S355', 'S355 (EN 10025-2) 355 / 490'],
-    ['S280GD', 'S280GD (EN 10346) 280 / 360'], ['S320GD', 'S320GD (EN 10346) 320 / 390'], ['S350GD', 'S350GD (EN 10346) 350 / 420'], ['S390GD', 'S390GD (EN 10346) 390 / 460'], ['S420GD', 'S420GD (EN 10346) 420 / 480'], ['S450GD', 'S450GD (EN 10346) 450 / 510'],
-    ['E250', 'E250 (IS 2062) 250 / 410'], ['E350', 'E350 (IS 2062) 350 / 490'], ['A653-50', 'ASTM A653 SS 50 (340 / 450)'], ['user', 'User-defined (enter f_y, f_u)']];
-  const GV = { S235: [235, 360], S275: [275, 430], S355: [355, 490], S280GD: [280, 360], S320GD: [320, 390], S350GD: [350, 420], S390GD: [390, 460], S420GD: [420, 480], S450GD: [450, 510], E250: [250, 410], E350: [350, 490], 'A653-50': [340, 450] };
+  // IS 2062 grades. The yield strength of IS 800 Table 1 depends on the thickness; the values below are those for thin plate and sheet (≤ 20 mm) and are
+  // recorded as provisional in the code register. Any other material is entered as user-defined values.
+  const GRADES = [['E250', 'E250 (IS 2062) f_y 250 / f_u 410'], ['E350', 'E350 (IS 2062) 350 / 490'], ['user', 'User-defined (enter f_y, f_u)']];
+  const GV = { E250: [250, 410], E350: [350, 490] };
   const BOLTS = [['4.6', '4.6'], ['5.6', '5.6'], ['8.8', '8.8'], ['10.9', '10.9']];
   const ARR = [['single', 'Single C'], ['b2b', 'Two C back-to-back (built-up)'], ['quad', 'Four C: two back-to-back pairs (built-up)']];
 
@@ -19,17 +19,13 @@ export const SCHEMA: any = (() => {
   gp('Project');
   f('proj', 'Project', 'x', 'Mezzanine – Example 3 (C-section)'); f('ref', 'Reference / model name', 'x', 'Example 3 mapped to C-sections'); f('eng', 'Designer', 'x', '');
   gp('Design standard');
-  f('code', 'Design route', 's', 'EN', { opts: [['EN', 'Eurocode: EN 1990 + EN 1993-1-1 / -1-3 / -1-5 / -1-8 (recommended values)'], ['AISI', 'AISI S100-16 (LRFD, DSM) + AISC 360-16 + ASCE 7 combinations'], ['IS', 'Indian: IS 875 + IS 800:2007 (column, base, connections); cold-formed members need IS 801 (see notes)']], help: 'One consistent route is used for loads, combinations and resistances. Checks the route does not cover are reported as REVIEW, never as PASS.' });
-  f('na', 'National annex / project overrides', 'x', 'Recommended values (no national annex)', { help: 'Recorded in the report. Enter NA-specific partial factors below.' });
-  f('gM0', 'γM0 (EN) – cross-section resistance', 'n', 1.0, { min: 0.8, max: 1.5 }); f('gM1', 'γM1 (EN) – member buckling', 'n', 1.0, { min: 0.8, max: 1.5 }); f('gM2', 'γM2 (EN) – net section, bolts, welds', 'n', 1.25, { min: 1.0, max: 1.6 });
-  f('gG', 'γG – permanent (EN 1990 Table A1.2(B))', 'n', 1.35, { min: 1, max: 1.6 }); f('gQ', 'γQ – variable', 'n', 1.5, { min: 1, max: 1.8 });
-  f('combo', 'EN 1990 ULS combination', 's', '610', { opts: [['610', 'Eq. 6.10 (1.35 G + 1.5 Q)'], ['610ab', 'Eq. 6.10a / 6.10b (less favourable, ξ = 0.85)']] });
-  f('psi0', 'ψ0 of the imposed load (storage: 1.0)', 'n', 1.0, { min: 0, max: 1, help: 'EN 1990 Table A1.1: category E (storage) ψ0 = 1.0.' });
+  f('code', 'Design standard', 's', 'IS', { opts: [['IS', 'IS 800:2007 (limit state method) with IS 875 loads']], help: 'IS 800:2007 is the only design standard of this application. Cold-formed member resistances need IS 801, which is not implemented: those checks are reported as REVIEW, never as PASS.' });
+  f('mig_ack', 'Migrated project: inputs reviewed', 'b', 'yes', { help: 'A project saved with a design route that no longer exists is migrated to IS 800:2007 with this set to "no": nothing is calculated until you have reviewed the inputs (the removed settings were dropped, grades that are not IS 2062 became user-defined values) and set it to "yes".' });
   gp('Cost data (optional, used only by the "minimum cost" optimisation objective)');
   f('cost_kg', 'Steel material + forming price', 'n', '', { unit: 'per kg', opt: 1, min: 0, help: 'Blank = no reliable cost data: the minimum-cost objective is then unavailable.' });
   f('cost_bu', 'Built-up fabrication premium per C added', 'n', '', { unit: 'per m', opt: 1, min: 0 });
   gp('Material constants');
-  f('E', 'Young’s modulus E', 'n', 210000, { unit: 'N/mm²', min: 190000, max: 215000, help: 'EN 1993-1-1 3.2.6: 210 000 N/mm²; AISI uses 203 000 N/mm² (29 500 ksi).' });
+  f('E', 'Young’s modulus E', 'n', 200000, { unit: 'N/mm²', min: 190000, max: 215000, help: 'IS 800:2007 2.2.4.1: E = 2.0 × 10⁵ N/mm².' });
   f('nu', 'Poisson’s ratio ν', 'n', 0.3, { min: 0.25, max: 0.32 });
   gp('Layout (bays, modules, levels)');
   f('nb', 'Bays along the main beam (main-beam spans per line)', 'n', 3, { min: 1, max: 20, int: 1 });
@@ -50,7 +46,7 @@ export const SCHEMA: any = (() => {
   f('lc_just', 'Physical load path / engineering justification for shear-centre loading', 'x', '', { help: 'Describe the detail that forces the load through the shear centre (e.g. bracket to the SC, paired members, torsion-free deck connection). Printed in the report.' });
   gp('Loads (area loads in kg/m², converted with g = 9.80665 m/s²)');
   f('qG', 'Permanent floor load (finishes, services) excl. decking', 'n', 0, { unit: 'kg/m²', min: 0 });
-  f('qQ', 'Imposed floor load', 'n', 600, { unit: 'kg/m²', min: 0, help: 'Storage / racking floors: use the project value (IS 875-2, EN 1991-1-1 Table 6.4 / NA).' });
+  f('qQ', 'Imposed floor load', 'n', 600, { unit: 'kg/m²', min: 0, help: 'Storage / racking floors: use the project value (IS 875 Part 2).' });
   f('QpLoc', 'Concentrated imposed load on the floor (for the decking check)', 'n', 0, { unit: 'kN', min: 0 });
 
   // ---------- 2 Main beam ----------
@@ -64,7 +60,7 @@ export const SCHEMA: any = (() => {
     f(m + 'Bt', 'Top flange width B_t', 'n', d.B, { unit: 'mm', min: 20, max: 200 }); f(m + 'Bb', 'Bottom flange width B_b', 'n', d.B, { unit: 'mm', min: 20, max: 200 });
     f(m + 'Ct', 'Top lip length C_t (0 = no lip)', 'n', d.C, { unit: 'mm', min: 0, max: 80 }); f(m + 'Cb', 'Bottom lip length C_b', 'n', d.C, { unit: 'mm', min: 0, max: 80 });
     f(m + 't', 'Core thickness t', 'n', d.t, { unit: 'mm', min: 0.6, max: 8 }); f(m + 'r', 'Internal bend radius r', 'n', d.r, { unit: 'mm', min: 0, max: 20 });
-    f(m + 'tol', 'Thickness tolerance (EN 1993-1-3 3.2.4)', 's', 'normal', { opts: [['normal', 'Normal tolerances – t_cor used directly'], ['reduced', 'Tolerance > 5 % below nominal – reduce t (enter the reduced t above)']] });
+    f(m + 'tol', 'Thickness tolerance', 's', 'normal', { opts: [['normal', 'Normal tolerances – t_cor used directly'], ['reduced', 'Tolerance > 5 % below nominal – reduce t (enter the reduced t above)']] });
     gp('Material');
     f(m + 'gr', 'Steel grade', 's', d.gr, { opts: GRADES });
     f(m + 'fy', 'Yield strength f_yb', 'n', d.fy, { unit: 'N/mm²', min: 200, max: 700 }); f(m + 'fu', 'Ultimate strength f_u', 'n', d.fu, { unit: 'N/mm²', min: 250, max: 800 });
@@ -78,10 +74,12 @@ export const SCHEMA: any = (() => {
     f(m + 'pcT', 'Pair-to-pair tab thickness', 'n', 4, { unit: 'mm' }); f(m + 'pcW', 'Tab length along the member', 'n', 60, { unit: 'mm' }); f(m + 'pcS', 'Tab pitch', 'n', 500, { unit: 'mm' });
   };
   tb('mb', 'Main beam');
-  member('mb_', { arr: 'b2b', H: 400, B: 50, C: 25, t: 2, r: 3, gr: 'S350GD', fy: 350, fu: 420 });
+  member('mb_', { arr: 'b2b', H: 400, B: 50, C: 25, t: 2, r: 3, gr: 'E350', fy: 350, fu: 490 });
   gp('Supports, restraints and serviceability');
   f('mb_sup', 'End support model', 's', 'pin', { opts: [['pin', 'Pinned (rotational stiffness ignored – conservative for the span)'], ['semi', 'Semi-rigid: S_j,ini of the end connection (Connections tab)']] });
-  f('mb_lat', 'SB-Int as lateral restraints', 's', 'auto', { opts: [['auto', 'Credit only where demonstrated (stiffness in the LTB model, strength checked)'], ['none', 'Do not credit (fork supports only)']] });
+  f('mb_lat', 'SB-Int as lateral restraints', 's', 'user', { opts: [['auto', 'Credit only where demonstrated (stiffness in the LTB model, strength checked)'], ['user', 'User-defined: SB-Int restrain the top flange (your assumption, not an IS 800 provision)'], ['none', 'Do not credit (fork supports only)']] });
+  f('mb_latK', 'User-defined restraint stiffness per SB-Int (blank = rigid)', 'n', '', { unit: 'kN/mm', opt: 1, min: 0, help: 'Lateral spring stiffness of ONE SB-Int connection at the top flange. Blank = full (rigid) restraint. Used only with the user-defined option above.' });
+  f('mb_latJ', 'Justification of the user-defined restraint', 'x', 'Full lateral restraint of the main-beam top flange at each SB-Int is assumed by the designer (edit to describe the connection and bracing that provide it).', { help: 'Describe why the SB-Int, their connections and the floor restrain the main beam (e.g. fin plate bolted to a stiff SB-Int anchored by a braced bay). Required with the user-defined option; printed in the report.' });
   f('mb_anch', 'SB-Int lines anchored laterally (braced bay, wall or demonstrated diaphragm)', 'b', 'yes');
   f('mb_tor', 'Torsional restraint from SB-Int connections', 's', 'auto', { opts: [['auto', 'Credit S_j only if the connection is not classified pinned'], ['none', 'Do not credit']] });
   f('mb_lcu', 'Distributed loads on the main beam (self-weight, UDL)', 's', 'glob', { opts: [['glob', 'Global Load Application Convention (General tab)'], ['cg', 'Through the centroid (CG)'], ['flange', 'On the top flange (mid-width)'], ['sc', 'Through the shear centre (acknowledgement on the General tab)']], help: 'The SB-Int reactions always enter through their physical connection (cleat bolt line), which is a real load path represented separately from this convention.' });
@@ -102,10 +100,10 @@ export const SCHEMA: any = (() => {
     f(m + 'N', 'Additional axial force (compression +)', 'n', 0, { unit: 'kN' });
   };
   tb('sbi', 'SB-Int');
-  secondary('sbi_', { arr: 'single', H: 350, B: 50, C: 25, t: 2, r: 3, gr: 'S350GD', fy: 350, fu: 420 });
+  secondary('sbi_', { arr: 'single', H: 350, B: 50, C: 25, t: 2, r: 3, gr: 'E350', fy: 350, fu: 490 });
   // ---------- 4 SB-End ----------
   tb('sbe', 'SB-End');
-  secondary('sbe_', { arr: 'single', H: 350, B: 50, C: 25, t: 2, r: 3, gr: 'S350GD', fy: 350, fu: 420 });
+  secondary('sbe_', { arr: 'single', H: 350, B: 50, C: 25, t: 2, r: 3, gr: 'E350', fy: 350, fu: 490 });
   f('sbe_pos', 'SB-End designed for', 's', 'interior', { opts: [['interior', 'Interior column line (floor on both sides)'], ['edge', 'Edge column line (floor on one side)']] });
 
   // ---------- 5 Connections ----------
@@ -119,7 +117,7 @@ export const SCHEMA: any = (() => {
     f(c + 'gap', 'End gap: C end to the support face (main beam: to the flange tips)', 'n', 5, { unit: 'mm', min: 0 });
     f(c + 'tp', 'Plate / cleat thickness t_p', 'n', d.tp, { unit: 'mm', min: 2, max: 30 }); f(c + 'hp', 'Plate / cleat depth h_p', 'n', d.hp, { unit: 'mm', min: 30 });
     f(c + 'zp', 'Plate top below the top of the C', 'n', d.zp, { unit: 'mm', min: 0 }); f(c + 'bp', 'Plate projection from the support face (angle: C-side leg)', 'n', d.bp, { unit: 'mm', min: 20 });
-    f(c + 'pgr', 'Plate grade', 's', 'S275', { opts: GRADES }); f(c + 'pfy', 'Plate f_y', 'n', 275, { unit: 'N/mm²' }); f(c + 'pfu', 'Plate f_u', 'n', 430, { unit: 'N/mm²' });
+    f(c + 'pgr', 'Plate grade', 's', 'E250', { opts: GRADES }); f(c + 'pfy', 'Plate f_y', 'n', 250, { unit: 'N/mm²' }); f(c + 'pfu', 'Plate f_u', 'n', 410, { unit: 'N/mm²' });
     f(c + 'nv', 'Bolt rows (vertical)', 'n', d.nv, { min: 1, max: 12, int: 1 }); f(c + 'nh', 'Bolt columns (horizontal)', 'n', d.nh, { min: 1, max: 4, int: 1 });
     f(c + 'p1', 'Vertical pitch p_1', 'n', d.p1, { unit: 'mm', min: 10 }); f(c + 'p2', 'Horizontal gauge p_2', 'n', d.p2, { unit: 'mm', min: 10 });
     f(c + 'z1', 'First bolt below the top of the C', 'n', d.z1, { unit: 'mm', min: 5 }); f(c + 'es', 'First bolt column from the C end e_s', 'n', d.es, { unit: 'mm', min: 5 });
@@ -127,7 +125,7 @@ export const SCHEMA: any = (() => {
     f(c + 'thr', 'Shear plane through the thread', 'b', 'yes');
     f(c + 'd0', 'Hole diameter d_0 (blank = d + 1 up to M14, d + 2 above)', 'n', '', { unit: 'mm', opt: 1 });
     f(c + 'hole', 'Hole type', 's', 'normal', { opts: [['normal', 'Normal round'], ['oversize', 'Oversize round'], ['slotV', 'Short slot, vertical (adjustment)']] });
-    f(c + 'wsh', 'Washers under head and nut', 's', 'std', { opts: [['std', 'Standard (EN ISO 7089)'], ['none', 'None']] });
+    f(c + 'wsh', 'Washers under head and nut', 's', 'std', { opts: [['std', 'Standard washers'], ['none', 'None']] });
     f(c + 'a', 'Weld throat a (plate / cleat to support or to the C)', 'n', d.a, { unit: 'mm', min: 0 }); f(c + 'Lw', 'Weld length per line (blank = plate depth)', 'n', '', { unit: 'mm', opt: 1 });
     f(c + 'nw', 'Weld lines', 'n', 2, { min: 1, max: 4, int: 1 });
     f(c + 'nvs', 'Support-side bolt rows (angle / end plate / bolted-welded)', 'n', d.nv, { min: 1, max: 12, int: 1 }); f(c + 'gs', 'Support-side bolt gauge (end plate: 2 columns)', 'n', 60, { unit: 'mm' });
@@ -144,13 +142,13 @@ export const SCHEMA: any = (() => {
   // ---------- 6 Box column ----------
   tb('col', 'Box column');
   gp('Section');
-  f('col_type', 'Column type', 's', 'weld', { opts: [['weld', 'Welded box from four plates'], ['rhsH', 'Hot-finished RHS / SHS (EN 10210)'], ['rhsC', 'Cold-formed RHS / SHS (EN 10219)']] });
+  f('col_type', 'Column type', 's', 'weld', { opts: [['weld', 'Welded box from four plates'], ['rhsH', 'Hot-finished RHS / SHS'], ['rhsC', 'Cold-formed RHS / SHS']] });
   f('col_b', 'Width b (face receiving the main beam)', 'n', 150, { unit: 'mm', min: 40 }); f('col_h', 'Depth h (face receiving the SB-End)', 'n', 150, { unit: 'mm', min: 40 });
   f('col_tb', 'Wall thickness of the b-faces', 'n', 5, { unit: 'mm', min: 1.5 }); f('col_th', 'Wall thickness of the h-faces', 'n', 5, { unit: 'mm', min: 1.5 });
   f('col_ro', 'RHS outer corner radius (blank = 2t)', 'n', '', { unit: 'mm', opt: 1 });
   f('col_cw', 'Welded box: corner welds', 's', 'fillet', { opts: [['fillet', 'Fillet / partial-penetration corner welds'], ['cjp', 'Full-penetration corner welds']] });
   f('col_aw', 'Corner weld throat a', 'n', 4, { unit: 'mm', min: 0 });
-  f('col_gr', 'Grade', 's', 'S355', { opts: GRADES }); f('col_fy', 'f_y', 'n', 355, { unit: 'N/mm²' }); f('col_fu', 'f_u', 'n', 490, { unit: 'N/mm²' });
+  f('col_gr', 'Grade', 's', 'E350', { opts: GRADES }); f('col_fy', 'f_y', 'n', 350, { unit: 'N/mm²' }); f('col_fu', 'f_u', 'n', 490, { unit: 'N/mm²' });
   gp('Stability and loads');
   f('col_base', 'Base', 's', 'pin', { opts: [['pin', 'Pinned base'], ['fix', 'Fixed base']] });
   f('col_frame', 'Frame stability', 's', 'braced', { opts: [['braced', 'Braced (vertical bracing, Bracing tab)'], ['knee', 'Sway frame stabilised by knee braces'], ['user', 'User effective-length factors']] });
@@ -178,6 +176,13 @@ export const SCHEMA: any = (() => {
   f('j_q', 'Additional load on the joist (ULS)', 'n', 0, { unit: 'kN/m' });
   f('j_nb', 'Bolts per joist end', 'n', 1, { min: 1, max: 4, int: 1 }); f('j_d', 'Bolt diameter', 'n', 12, { unit: 'mm' }); f('j_bg', 'Bolt grade', 's', '8.8', { opts: BOLTS }); f('j_e1', 'End distance e_1', 'n', 25, { unit: 'mm' });
   f('j_anch', 'Joist lines anchored to', 's', 'kneeSBE', { opts: [['kneeSBE', 'SB-End knee-braced to the columns'], ['bay', 'Braced bay'], ['none', 'Not anchored']] });
+  f('j_anR', 'Capacity of the anchorage of the joist lines (braced bay / knee-braced end beams)', 'n', '', { unit: 'kN', opt: 1, min: 0, help: 'From the separate design of the anchorage; blank = not known (the joist is then not verified).' });
+  f('j_k', 'Joist effective-length factor k (IS 800 7.2)', 'n', '', { opt: 1, min: 0.1, max: 4, help: 'Required for the joist strength check (hollow-section joists); no value is assumed.' });
+  f('j_p', 'Bolt pitch of the joist end connection (more than one bolt)', 'n', 40, { unit: 'mm', min: 0 });
+  f('j_Kc', 'Axial stiffness of ONE joist end connection K_c', 'n', '', { unit: 'kN/mm', opt: 1, min: 0, help: 'From test or a separate calculation; blank = not known (the restraint stiffness cannot be modelled).' });
+  f('j_Ka', 'Stiffness of the anchorage K_a', 'n', '', { unit: 'kN/mm', opt: 1, min: 0, help: 'Horizontal stiffness of the braced bay / knee-braced end beams; blank = not known.' });
+  f('j_cred', 'How the joists are credited as lateral restraints', 's', 'verified', { opts: [['verified', 'Only if every IS 800 check is verified and satisfied'], ['user', 'User-defined assumption (not an IS 800 provision; justification required)']] });
+  f('j_credJ', 'Justification of the user-defined joist restraint', 'x', '', { help: 'Describe why the joists, their connections and the anchorage restrain the secondary. Required with the user-defined option; printed in the report.' });
 
   // ---------- 8 Knee bracing ----------
   tb('knee', 'Knee bracing');
@@ -191,7 +196,7 @@ export const SCHEMA: any = (() => {
   f('k_nb', 'Bolts per end (one line)', 'n', 1, { min: 1, max: 4, int: 1 }); f('k_d', 'Bolt diameter', 'n', 12, { unit: 'mm' }); f('k_bg', 'Bolt grade', 's', '8.8', { opts: BOLTS });
   f('k_p1', 'Pitch p_1', 'n', 60, { unit: 'mm' }); f('k_e1', 'End distance e_1', 'n', 25, { unit: 'mm' }); f('k_e2', 'Edge distance e_2 (blank = b/2)', 'n', '', { unit: 'mm', opt: 1 });
   f('k_tg', 'Gusset / packing between the two angles', 'n', 6, { unit: 'mm' }); f('k_sp', 'Packing spacing (two angles)', 'n', 300, { unit: 'mm' });
-  f('k_H', 'Additional horizontal load per column at beam level (ULS)', 'n', 0, { unit: 'kN', help: 'The notional sway force φ·N (EN 1993-1-1 5.3.2) is added automatically.' });
+  f('k_H', 'Additional horizontal load per column at beam level (ULS)', 'n', 0, { unit: 'kN', help: 'The IS 800 4.3.6 notional horizontal force (0.5 % of the factored gravity load of the storey) is added automatically.' });
 
   // ---------- 9 Surface / decking ----------
   tb('deck', 'Surface / decking');
@@ -203,14 +208,14 @@ export const SCHEMA: any = (() => {
   f('d_I', 'Second moment of area per metre width I_s (steel deck / user)', 'n', 250000, { unit: 'mm⁴/m' }); f('d_W', 'Section modulus per metre W_s (steel deck / user)', 'n', 9000, { unit: 'mm³/m' });
   f('d_fy', 'Steel f_y (deck)', 'n', 320, { unit: 'N/mm²' }); f('d_fu', 'Steel f_u (deck)', 'n', 390, { unit: 'N/mm²' });
   f('d_fmk', 'MDF characteristic bending strength f_m,k', 'n', 17, { unit: 'N/mm²' }); f('d_Em', 'MDF / board E_mean', 'n', 3000, { unit: 'N/mm²' });
-  f('d_kmod', 'k_mod (MDF, EN 1995)', 'n', 0.4, { min: 0.1, max: 1.1 }); f('d_gm', 'γ_M (MDF)', 'n', 1.3, { min: 1, max: 2 });
+  f('d_kmod', 'Modification factor (MDF)', 'n', 0.4, { min: 0.1, max: 1.1, help: 'Timber board design is outside IS 800: the MDF resistance is reported as REVIEW.' }); f('d_gm', 'Partial factor (MDF)', 'n', 1.3, { min: 1, max: 2 });
   f('d_qall', 'Grating / user: design capacity for the span (manufacturer)', 'n', '', { unit: 'kN/m²', opt: 1 });
   f('d_dl', 'Surface deflection limit span/…', 'n', 200, { min: 50 });
   gp('Restraint data (credited only when demonstrated)');
   f('d_basis', 'Basis of the restraint values', 's', 'manuf', { opts: [['none', 'None (not demonstrated)'], ['manuf', 'Manufacturer data'], ['test', 'Test report'], ['calc', 'Separate calculation'], ['fe', 'FE analysis']] });
   f('d_S', 'In-plane shear stiffness provided S (per secondary span)', 'n', 20000, { unit: 'kN', opt: 1 });
-  f('d_CDA', 'Rotational stiffness of the surface-to-SB connection C_D,A', 'n', 3, { unit: 'kN·m/m/rad', opt: 1, help: 'From test or manufacturer only (EN 1993-1-3 10.1.5.2). Blank = torsional restraint not credited.' });
-  f('d_fx', 'Fastener', 's', 'screw', { opts: [['screw', 'Self-drilling screw (EN 1993-1-3 8.3)'], ['bolt', 'Bolt'], ['clip', 'Clip / other (enter resistance)']] });
+  f('d_CDA', 'Rotational stiffness of the surface-to-SB connection C_D,A', 'n', 3, { unit: 'kN·m/m/rad', opt: 1, help: 'From test or manufacturer only. Blank = torsional restraint not credited.' });
+  f('d_fx', 'Fastener', 's', 'screw', { opts: [['screw', 'Self-drilling screw'], ['bolt', 'Bolt'], ['clip', 'Clip / other (enter resistance)']] });
   f('d_fd', 'Fastener diameter', 'n', 5.5, { unit: 'mm' }); f('d_fdw', 'Head / washer diameter d_w', 'n', 14, { unit: 'mm' });
   f('d_fs', 'Fastener spacing along the secondary', 'n', 300, { unit: 'mm' }); f('d_fn', 'Fasteners per position', 'n', 2, { min: 1, int: 1 });
   f('d_fv', 'Fastener shear resistance F_v,Rd (manufacturer; blank = not known)', 'n', '', { unit: 'kN', opt: 1 });
@@ -223,7 +228,7 @@ export const SCHEMA: any = (() => {
   f('br_use', 'Plan bracing in the braced bay', 'b', 'yes');
   f('br_type', 'Bracing member', 's', 'flat', { opts: [['rod', 'Round rod (tension only)'], ['flat', 'Flat bar (tension only)'], ['angle', 'Angle']] });
   f('br_b', 'Flat width / rod Ø / angle leg', 'n', 50, { unit: 'mm' }); f('br_t', 'Flat / angle thickness', 'n', 5, { unit: 'mm' });
-  f('br_fy', 'f_y', 'n', 275, { unit: 'N/mm²' }); f('br_fu', 'f_u', 'n', 430, { unit: 'N/mm²' });
+  f('br_fy', 'f_y', 'n', 250, { unit: 'N/mm²' }); f('br_fu', 'f_u', 'n', 410, { unit: 'N/mm²' });
   f('br_d', 'End bolt diameter', 'n', 12, { unit: 'mm' }); f('br_bg', 'Bolt grade', 's', '8.8', { opts: BOLTS }); f('br_nb', 'Bolts per end', 'n', 1, { min: 1, int: 1 });
   f('br_nbay', 'Number of braced bays per line', 'n', 1, { min: 1, int: 1 });
   f('vb_use', 'Vertical bracing between columns', 'b', 'yes'); f('vb_b', 'Vertical brace size (flat width)', 'n', 50, { unit: 'mm' }); f('vb_t', 'Vertical brace thickness', 'n', 5, { unit: 'mm' });
@@ -232,6 +237,17 @@ export const SCHEMA: any = (() => {
   const defaults = () => { const d = {}; for (const x of T) if (!x.tabDef) d[x.id] = x.def; return d; };
   const byId = {}; for (const x of T) if (!x.tabDef) byId[x.id] = x;
   const tabs = T.filter(x => x.tabDef);
-  return { T, tabs, byId, defaults, GV, GRADES };
+  // Stored inputs of earlier versions may carry a removed design route. Nothing is reinterpreted silently: removed fields are dropped, a project of another route
+  // comes back as IS 800 with the migration flag "not reviewed" (the calculation refuses to run until the user reviews and acknowledges), a grade that is no
+  // longer offered becomes a user-defined value (f_y, f_u are kept as the user's numbers).
+  const REMOVED = ['na', 'gM0', 'gM1', 'gM2', 'gG', 'gQ', 'combo', 'psi0'];
+  const migrate = (raw) => {
+    const out = Object.assign({}, raw), flags = [];
+    for (const k of REMOVED) if (k in out) { flags.push(`removed input "${k}" (it belonged to a design route that no longer exists)`); delete out[k]; }
+    if (out.code !== undefined && out.code !== 'IS') { flags.push(`design route "${out.code}" no longer exists: the project now uses IS 800:2007`); out.code = 'IS'; out.mig_ack = 'no'; }
+    for (const k in out) { const f = byId[k]; if (f && f.type === 's' && f.opts && out[k] !== '' && out[k] !== undefined && !f.opts.some(o => String(o[0]) === String(out[k]))) { flags.push(`"${f.label}": option "${out[k]}" no longer exists (kept as user-defined values)`); out[k] = f.opts.some(o => o[0] === 'user') ? 'user' : f.def; out.mig_ack = 'no'; } }
+    return { inputs: out, migrated: flags.length > 0, flags };
+  };
+  return { T, tabs, byId, defaults, GV, GRADES, migrate };
 })();
 

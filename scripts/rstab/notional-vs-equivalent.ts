@@ -1,6 +1,6 @@
 // IS 800:2007 4.3.6 notional forces (0.5 % of the factored dead + vertical imposed load of each level) on the benchmark mezzanine, against the net horizontal force per
 // level of the RSTAB-type equivalent imperfection loads (±φ0·N, φ0 = 1/200).   npx tsx scripts/rstab/notional-vs-equivalent.ts
-// Purpose: show how the two representations relate on a real model. The benchmark is an RSTAB reproduction (flat φ0 = 1/200), neither an IS 800 nor an EN 1993-1-1 run.
+// Purpose: show how the two representations relate on a real model. The benchmark is an RSTAB reproduction (flat φ0 = 1/200), not an IS 800 run.
 import { prepare } from '../../src/server/frame/model';
 import { solveFrame } from '../../src/server/frame/solve';
 import { buildModel, loadCases, imperfectionLoads, SECTIONS, MATERIAL } from './build-model';

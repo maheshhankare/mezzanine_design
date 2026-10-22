@@ -10,7 +10,6 @@ export function ConnPanel() {
   if (!res || res.fatal) return null;
   const c = res.mods.conn[connSel];
   if (!c) return <Card><p>This connection does not occur in the current layout.</p></Card>;
-  const st = c.stiff || {};
   return (
     <>
       <div className="rgrid">
@@ -20,20 +19,16 @@ export function ConnPanel() {
           <Html html={res.svg?.conn?.[connSel]?.connPlan ?? ''} />
         </Card>
         <Card>
-          <h3>Stiffness and classification (calculated)</h3>
+          <h3>Joint model</h3>
           <KvTable
             rows={[
               ['Bolt-group centroid to the support line e', c.e, 'mm', 1],
-              ['S_j,ini', (st.Sj || 0) / 1e6, 'kNm/rad', 1],
-              ['Pinned limit 0.5 E I_b / L_b', (st.pinLim || 0) / 1e6, 'kNm/rad', 1],
-              ['Rigid limit k_b E I_b / L_b', (st.rigidLim || 0) / 1e6, 'kNm/rad', 1],
-              ['Classification', st.cls || '–', ''],
-              ['Axial stiffness K_c', st.Kc || 0, 'N/mm', 0],
+              ['Joint model', 'nominally pinned (joint stiffness is not calculated)', ''],
               ['Fork restraint at the member end', c.fork ? 'demonstrated' : 'not demonstrated', ''],
               ['Bolt rows that fit', c.nMax, '', 0],
             ]}
           />
-          <p className="hint">EN 1993-1-8 5.2.2.5 stiffness classification. A joint analysed as pinned but classified semi-rigid is checked for the end moment its stiffness attracts.</p>
+          <p className="hint">The joint is analysed as nominally pinned: no verified IS 800 provision for the stiffness of the joint is available, and no joint restraint is credited to the supported member.</p>
         </Card>
       </div>
       <Checks list={c.checks} title={c.typeName + ' checks'} />
@@ -98,6 +93,7 @@ export function JoistPanel() {
         <Card key={k}>
           <h3>Joists on {k === 'sbi' ? 'SB-Int' : 'SB-End'} <Pill st={CHK.overall(j.checks).status} /></h3>
           <p>Positions: {(j.positions || []).map((x: number) => F(x, 0)).join(', ')} mm. Credited as lateral restraints: <b>{j.credited ? 'yes' : 'no'}</b> – {j.reason || ''}</p>
+          {j.demand && <p className="hint">IS 800 8.3.4: restraint force {F(j.demand.perPoint / 1e3, 2)} kN per joist ({j.n} restraint points; {F(j.demand.anchorage / 1e3, 2)} kN to the lateral supports); restraint stiffness K_J = {Number.isFinite(j.kJ) ? F(j.kJ / 1e3, 2) + ' kN/mm (used in the buckling analysis)' : 'not known (the restraint cannot be modelled)'}. Mode: {j.mode === 'user' ? 'user-defined assumption' : 'IS 800 verified checks'}.</p>}
           <Checks list={j.checks} title="Joist checks" />
         </Card>
       ))}

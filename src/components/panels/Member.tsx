@@ -42,10 +42,7 @@ export function MemberPanel({ k }: { k: 'mb' | 'sbi' | 'sbe' }) {
     ['Principal axis angle α', (g.alpha * 180) / Math.PI, '°', 2], ['I_1 / I_2', `${F(g.I1 / 1e4, 1)} / ${F(g.I2 / 1e4, 2)}`, 'cm⁴'],
   ];
   if (arr === 'quad' && g.IzzNonComposite) props.push(['I_z without pair-to-pair action', g.IzzNonComposite / 1e4, 'cm⁴', 1]);
-  const e = d.eff || {};
   const effRows: any[] = [
-    ['W_eff,y sagging', e.WeffP / 1e3, 'cm³', 2], ['W_eff,y hogging', e.WeffN / 1e3, 'cm³', 2], ['M_c,Rd sagging', e.McRdP / 1e6, 'kNm', 2], ['M_c,Rd hogging', e.McRdN / 1e6, 'kNm', 2],
-    ['A_eff (uniform compression)', e.Aeff, 'mm²', 1], ['N_c,Rd', e.NcRd / 1e3, 'kN', 1], ['V_b,Rd', e.VbRd / 1e3, 'kN', 1],
     ['M_cr (credited restraints)', d.Mcr / 1e6, 'kNm', 2], ['M_cr (forks only)', d.Mcr0 / 1e6, 'kNm', 2], ['Torsion amplification 1/(1 − M/M_cr)', isFinite(d.amp) ? d.amp : 'unstable', '', 3],
   ];
   const rows = [...(d.spec.restr.lat || []), ...(d.spec.restr.latC || []), ...(d.spec.restr.tor || []), ...(d.spec.restr.torC || [])];
@@ -79,7 +76,7 @@ export function MemberPanel({ k }: { k: 'mb' | 'sbi' | 'sbe' }) {
               <p className="hint">Holes from the {cn.typeName} (Connections tab). They are not perforations: no Sigma geometry or perforation reduction is used anywhere.</p>
             </>
           )}
-          <KvTable rows={effRows} caption="Effective section and stability (calculated)" />
+          <KvTable rows={effRows} caption="Elastic stability (calculated)" />
           {(d.notes || []).map((n: string, i: number) => <p className="note" key={i}>{n}</p>)}
         </Card>
       </div>

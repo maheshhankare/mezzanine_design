@@ -1,0 +1,13 @@
+Baseline before the Indian-code-only conversion: commit 4f0b646 2026-10-21
+== test:frame
+
+all 71 checks passed
+== test:codes
+
+all 113 checks passed
+== test:rstab
+
+RSTAB regression: all bounds met
+== test:engine
+fatal: false overall: FAIL fail/review: 15 0
+selfTest steps: 6 {"id":"X6","name":"Revised study on the IS route, MDF floor, variable SB-Int positions","ms":100,"fp":"a5dee35a7651a205","status":"FAIL","eta":263602.75200000004,"values":1141,"exact":904,"withinTol":237,"maxRel":5.048958084281746e-11,"fails":[],"nFail":0,"textDiff":0,"verdict":"MATCH (within tolera

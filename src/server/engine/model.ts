@@ -1,4 +1,4 @@
-// @ts-nocheck — ported verbatim from the mockup (index.html, 85_model.js); logic unchanged so results match the mockup.
+// @ts-nocheck — ported from the mockup (index.html, 85_model.js); the design standard is IS 800:2007 only.
 import "server-only";
 import { LOADS } from './loads';
 import { SEC } from './section';
@@ -19,8 +19,11 @@ export const MODEL: any = (() => {
   let EXT = null;
   function normalise(raw) {
     const I = SCHEMA.defaults();
-    for (const k in raw) if (k in I) I[k] = raw[k];
+    const mig = SCHEMA.migrate(raw || {});
+    for (const k in mig.inputs) if (k in I) I[k] = mig.inputs[k];
     const msgs = [];
+    // IS 800:2007 is the only design standard; a project migrated from a removed route is not calculated until its inputs are reviewed and acknowledged
+    if (I.mig_ack !== 'yes') msgs.push({ id: 'mig_ack', tab: 'gen', level: 'error', text: 'This project was saved with a design route that no longer exists and has been migrated to IS 800:2007 (' + mig.flags.join('; ') + '). Review all inputs, then set "Migrated project: inputs reviewed" to Yes. Nothing is calculated before.' });
     for (const f of SCHEMA.T) {
       if (f.tabDef || f.type !== 'n') continue;
       const v = I[f.id];
@@ -72,6 +75,7 @@ export const MODEL: any = (() => {
     for (const [p, m, tab] of [[pM, 'Main beam', 'mb'], [pI, 'SB-Int', 'sbi'], [pE, 'SB-End', 'sbe']]) for (const e of SEC.validate(p)) msgs.push({ id: tab + '_H', tab, level: 'error', text: `${m}: ${e}` });
     const usesSC = I.lc_conv === 'sc' && ['sbi_ecc', 'sbe_ecc', 'mb_lcu'].some(k => I[k] === 'glob') || ['sbi_ecc', 'sbe_ecc', 'mb_lcu'].some(k => I[k] === 'sc');
     if (usesSC && (I.lc_ack !== 'yes' || !String(I.lc_just || '').trim())) msgs.push({ id: 'lc_ack', tab: 'gen', level: 'error', text: 'Shear-centre (no-torsion) loading is selected: tick the acknowledgement and describe the physical load path that enforces it, or choose the CG / top-flange convention' });
+    if (I.mb_lat === 'user' && !String(I.mb_latJ || '').trim()) msgs.push({ id: 'mb_latJ', tab: 'mb', level: 'error', text: 'User-defined SB-Int restraint is selected: describe the justification (Main beam tab), or choose another option.' });
     // any invalid input stops the calculation: no result (and so no PASS) is produced from a substituted value
     if (msgs.some(m => m.level === 'error')) { out.fatal = true; return out; }
     const optOf = m => ({ gap: I[m + 'gap'], pairSpacing: I[m + 'ps'] });
@@ -209,16 +213,17 @@ export const MODEL: any = (() => {
       const pre = MEM.design(spec);
       if (pre.error) { mbDesigns[line] = pre; continue; }
       const MEd = Math.max(pre.env.Mmax, -pre.env.Mmin), ho = pM.H - pM.t;
-      const brace = RST.nodalBrace(MEd, ho, sbSpacing);
+      const brace = { Pbr: 0 }; // the restraint force and stiffness rules of the removed design route were deleted; IS 800 has no verified equivalent: no SB-Int restraint is credited
       // SB-Int connection checked with the brace force (axial) to decide whether the restraint can be credited
       const ciR = sbi && !sbi.error ? conn0('ci', mI, mbSup, Math.max(...sbi.Rmax), brace.Pbr, 0, { bothSides: sides === 2 }) : null;
       const Esb = E * gI.A / Lsb, Kc = ciR ? ciR.stiff.Kc : 0, Klat = Kc > 0 ? 1 / (1 / Esb + 1 / Kc) : 0;
       const connOK = ciR && ciR.overall.status === 'PASS';
       const anch = I.mb_anch === 'yes';
-      const credit = I.mb_lat === 'auto' && anch && connOK;
-      const why = I.mb_lat !== 'auto' ? 'not credited by choice' : !anch ? 'SB-Int lines not anchored' : !connOK ? 'SB-Int connection does not pass with the restraint force' : 'demonstrated: stiffness in the LTB model, strength checked';
+      const userR = I.mb_lat === 'user' && anch;
+      const credit = userR;
+      const why = userR ? 'USER-DEFINED assumption (not an IS 800 provision): ' + String(I.mb_latJ).trim() : I.mb_lat === 'user' ? 'SB-Int lines not anchored: the user-defined restraint is not credited' : I.mb_lat !== 'auto' ? 'not credited by choice' : !anch ? 'SB-Int lines not anchored' : 'no verified IS 800 criterion for the restraint force and stiffness of the SB-Int connection';
       const aR = pM.H / 2 - ci.geo.zg;
-      for (const x of xsAll) spec.restr.lat.push({ x, k: sides * Klat, a: aR, credited: credit && Klat > 0, label: `SB-Int at ${Math.round(x)} mm`, why });
+      for (const x of xsAll) spec.restr.lat.push({ x, k: sides * (userR ? (+I.mb_latK > 0 ? +I.mb_latK * 1e3 : RST.KRIGID) : Klat), a: aR, credited: credit, label: `SB-Int at ${Math.round(x)} mm`, why });
       const torCredit = I.mb_tor === 'auto' && ciR && ciR.stiff.cls !== 'nominally pinned' && connOK;
       if (torCredit) for (const x of xsAll) { const bt = sides / (1 / ciR.stiff.Sj + 1 / (2 * E * gI.Iyy / Lsb)); spec.restr.tor.push({ x, k: bt, credited: true, label: `SB-Int torsional at ${Math.round(x)} mm`, why: 'connection classified semi-rigid / rigid' }); }
       if (I.d_mb === 'yes') {
@@ -227,7 +232,8 @@ export const MODEL: any = (() => {
         spec.deckR = dr;
       }
       const d = MEM.design(spec); d.spec = spec; d.brace = brace; d.Klat = Klat; d.restrWhy = why; d.ciR = ciR;
-      if (!d.error && xsAll.length && !(credit && Klat > 0)) d.notes.push(`SB-Int lateral restraints are not credited (${why}); the main beam is checked for LTB between its end forks only.`);
+      if (!d.error && userR && xsAll.length) { d.notes.push('Lateral restraint of the SB-Int is a USER-DEFINED assumption (' + (+I.mb_latK > 0 ? I.mb_latK + ' kN/mm per SB-Int' : 'rigid') + '): ' + String(I.mb_latJ).trim()); d.checks.push(CHK.mk({ grp: 'Member', name: 'User-defined lateral restraint of the SB-Int (LTB model)', clause: '', review: true, note: 'Not an IS 800 provision: the restraint force and the stiffness of the connection are not checked. Result is user-defined.' })); }
+      if (!d.error && xsAll.length && !credit) d.notes.push(`SB-Int lateral restraints are not credited (${why}); the main beam is checked for LTB between its end forks only.`);
       mbDesigns[line] = d;
     }
     const mbGov = ['interior', 'edge'].map(k => mbDesigns[k]).filter(d => d && !d.error).sort((a, b) => (b.overall.eta || 0) - (a.overall.eta || 0))[0];
@@ -279,7 +285,7 @@ export const MODEL: any = (() => {
     out.mods.col = col; out.mods.base = bas;
     // ---------- bracing ----------
     const NfMB = mbGov ? Math.max(mbGov.env.Mmax, -mbGov.env.Mmin) / (pM.H - pM.t) : 0;
-    const brc = RST.bracing({ R, I, sumNf: NfMB * (I.nm + 1), nRestr: I.nm + 1, Lline: Lmb, Htot: (kn.use ? kn.H : (R.code === 'EN' ? 1 / 200 : 0.002) * Ncol) * (I.nb + 1) + (+I.br_H) * 1e3 / (I.nm + 1), Lmb, Lsb, hc: +I.hc, ga: gaOK ? GAs.brac : null });
+    const brc = RST.bracing({ R, I, sumNf: NfMB * (I.nm + 1), nRestr: I.nm + 1, Lline: Lmb, Htot: (kn.use ? kn.H : 0.005 * Ncol) * (I.nb + 1) + (+I.br_H) * 1e3 / (I.nm + 1), Lmb, Lsb, hc: +I.hc, ga: gaOK ? GAs.brac : null });
     out.mods.brac = brc;
     // ---------- summary ----------
     out.summary = summarise(out);

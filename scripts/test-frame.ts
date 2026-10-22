@@ -4,7 +4,6 @@ import { prepare } from '../src/server/frame/model';
 import { solveFrame, criticalLoadFactor } from '../src/server/frame/solve';
 import { Skyline } from '../src/server/frame/skyline';
 import { swayGeometry, bowGeometry, swayLoads, resolveImperfectionSource } from '../src/server/frame/imperfection';
-import { emptyNationalAnnex } from '../src/shared/codeRegister';
 
 let failed = 0;
 const rows: string[] = [];
@@ -309,14 +308,11 @@ const midStation = (res: ReturnType<typeof solveFrame>, member = 1) => {
   const rbow = solveFrame({ prepared: psb, combo: [{ lc: lc({ nodal: [{ node: 2, f: [-Pb, 0, 0, 0, 0, 0] }] }), factor: 1 }], elementImperfection: bowGeometry(psb, [1], e0 / Lb, [0, 1, 0]).elements });
   const mid = midStation(rbow).find((s) => Math.abs(s[0] - Lb / 2) < 1e-6)!;
   check('bowGeometry: mid moment  P e0/(1-P/Pcr)  (P = 0.5 Pcr)', Math.abs(mid[6]), (Pb * e0) / 0.5, 3e-3, 'Nmm');
-  // code routes (the register decides per feature; details in scripts/test-codes.ts)
-  assert('imperfection source "user" is allowed and labelled user-defined', (() => { const r = resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' } }); return r.allowed && r.label === 'user-defined'; })());
-  assert('IS 800: explicit geometric sway is refused (no provision in the code)', !resolveImperfectionSource({ source: 'IS800', sway: { mode: 'geometry' } }).allowed);
-  assert('IS 800: notional / equivalent loads are allowed, provisional (distribution assumption)', (() => { const r = resolveImperfectionSource({ source: 'IS800', sway: { mode: 'loads' } }); return r.allowed && r.label === 'provisional'; })());
-  assert('EN 1993 route is refused without a National Annex', (() => { const r = resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' } }); return !r.allowed && r.blocked.some((x) => /National Annex/.test(x)); })());
-  assert('EN 1993 route is refused while the NDPs of the Annex are unset', !resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' }, annex: emptyNationalAnnex('XX', 'unset') }).allowed);
-  assert('EN 1993 with accepted Eurocode-text values is allowed, labelled provisional', (() => { const r = resolveImperfectionSource({ source: 'EN1993', sway: { mode: 'loads' }, acceptEurocodeTextValues: true }); return r.allowed && r.label === 'provisional'; })());
-  assert('double-counting warning: geometric sway + notional loads', resolveImperfectionSource({ source: 'user', sway: { phi0, mode: 'geometry' }, notionalLoadsInLoadCases: true }).warnings.length > 0);
+  // IS 800: the imperfection source (details in scripts/test-codes.ts)
+  assert('user-defined sway is allowed and labelled user-defined', (() => { const r = resolveImperfectionSource({ sway: { mode: 'geometry', source: 'user' } }); return r.allowed && r.label === 'user-defined'; })());
+  assert('IS 800: explicit geometric sway as a CODE value is refused (the code has none)', !resolveImperfectionSource({ sway: { mode: 'geometry', source: 'code' } }).allowed);
+  assert('IS 800: notional loads as a code value are allowed, provisional (distribution assumption)', (() => { const r = resolveImperfectionSource({ sway: { mode: 'notional', source: 'code' } }); return r.allowed && r.label === 'provisional'; })());
+  assert('double-counting warning: geometric sway + notional loads', resolveImperfectionSource({ sway: { mode: 'geometry', source: 'user' }, notionalLoadsInLoadCases: true }).warnings.length > 0);
 }
 
 // ---------------- 8 von Karman vs Theory II: axial shortening of a bent member (the benchmark's 12 mm edge drift) ----------------

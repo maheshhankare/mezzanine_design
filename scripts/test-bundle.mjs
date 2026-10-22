@@ -11,7 +11,7 @@ const files = [];
 const all = files.filter((f) => /\.(js|css|html|json|txt)$/.test(f)).map((f) => [f, readFileSync(f, 'utf8')]);
 
 // markers taken from the calculation engine (function names, method names and clause texts that exist only there) and from the secrets
-const engine = ['searchComp', 'ltbAssemble', 'ltbFactor', 'rhoInternal', 'rhoOutstand', 'stiffenedFlange', 'aisiFlexure', 'arrangementEff', 'kInternal', 'stiffBolt', 'placeFlange', 'CUFSM', 'Timoshenko', 'Cantilever plate LTB', 'bimoment', 'Hermite', 'XB_REF', 'MODEL.compute', 'EN 1993-1-3 8.3(8)', 'plate block tearing', 'Block tearing', 'surface fixings', 'lever study', 'runSetup', 'OPT.run'];
+const engine = ['searchComp', 'ltbAssemble', 'ltbFactor', 'Timoshenko', 'bimoment', 'Hermite', 'XB_REF', 'MODEL.compute', 'Block tearing', 'lever study', 'runSetup', 'OPT.run', 'rhsProps', 'solveFrame', 'buildCalculationRecord'];
 const secrets = ['neondb_owner', 'npg_', 'neon.tech', 'DATABASE_URL', 'AUTH_SECRET', 'postgresql://', 'scrypt$'];
 let failed = 0;
 const ok = (name, cond, extra = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${extra ? '  ' + extra : ''}`); if (!cond) failed++; };

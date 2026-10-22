@@ -1,0 +1,116 @@
+// IS 800:2007 lateral restraint (8.3.4) and bearing-type bolts (10.2, 10.3): equations against hand values, and the response of the joist restraint of the C-section
+// designer to the joist section, number, connection and anchorage.   npm run test:restraint
+import * as RD from '../src/server/frame/design/restraint';
+import { MODEL } from '../src/server/engine/model';
+import { SCHEMA } from '../src/shared/schema';
+
+let passed = 0, failed = 0;
+const ok = (name: string, cond: boolean, detail = '') => { if (cond) passed++; else { failed++; console.log(`FAIL ${name} ${detail}`); } };
+const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
+
+// ---- 8.3.4: hand values
+let d = RD.restraintDemand({ Fcf: 100000, n: 5 });
+ok('8.3.4 total 2.5 %', near(d.total, 2500));
+ok('8.3.4 per point = 2.5 %/n = 0.5 % -> raised to 1 %', near(d.perPoint, 1000) && near(d.anchorage, 5000), JSON.stringify(d));
+d = RD.restraintDemand({ Fcf: 100000, n: 2 });
+ok('8.3.4 two points: 2.5 %/2 = 1.25 % (> 1 %)', near(d.perPoint, 1250) && near(d.anchorage, 2500));
+d = RD.restraintDemand({ Fcf: 100000, n: 1 });
+ok('8.3.4 one point carries 2.5 %', near(d.perPoint, 2500));
+let threw = false; try { RD.restraintDemand({ Fcf: 1, n: 0 }); } catch { threw = true; }
+ok('8.3.4 invalid number of points refused', threw);
+
+// ---- 10.3: hand values (M16, 8.8: f_ub 800, f_yb 640, A_n 157, A_sb 201.06)
+const b16: RD.BoltInput = { d: 16, fub: 800, fyb: 640, An: 157, Asb: Math.PI * 256 / 4 };
+let sh = RD.boltShearCapacity(b16, { nn: 1, ns: 0 });
+ok('10.3.3 V_dsb = f_ub A_nb / (sqrt3 gamma_mb) (one plane through the threads)', near(sh.Vdsb, 800 * 157 / Math.sqrt(3) / 1.25, 1e-9), String(sh.Vdsb));
+sh = RD.boltShearCapacity(b16, { nn: 0, ns: 2 });
+ok('10.3.3 two shank planes', near(sh.Vdsb, 800 * 2 * b16.Asb / Math.sqrt(3) / 1.25));
+sh = RD.boltShearCapacity(b16, { nn: 1, ns: 0, lj: 300 }); // 15 d = 240 mm; beta = 1.075 - 300/3200 = 0.98125
+ok('10.3.3.1 long joint beta_lj = 1.075 - l_j/(200 d)', near(sh.betaLj, 1.075 - 300 / 3200) && near(sh.Vdsb, 800 * 157 / Math.sqrt(3) / 1.25 * sh.betaLj));
+sh = RD.boltShearCapacity(b16, { nn: 1, ns: 0, lj: 2000 });
+ok('10.3.3.1 beta_lj not below 0.75', near(sh.betaLj, 0.75));
+sh = RD.boltShearCapacity(b16, { nn: 1, ns: 0, lj: 100 });
+ok('10.3.3.1 no reduction up to 15 d', sh.betaLj === 1);
+sh = RD.boltShearCapacity(b16, { nn: 1, ns: 0, lg: 96 }); // 6 d: 8/(3+6) = 0.8889
+ok('10.3.3.2 large grip beta_lg = 8/(3 + l_g/d)', near(sh.betaLg, 8 / 9) && sh.valid);
+ok('10.3.3.2 grip above 8 d is invalid', !RD.boltShearCapacity(b16, { nn: 1, ns: 0, lg: 8 * 16 + 1 }).valid);
+let bb = RD.boltBearingCapacity(b16, { e: 40, pitch: 50, d0: 18, t: 6, fu: 410 }); // k_b = min(0.7407, 0.6204, 1.951, 1) = 0.6204
+ok('10.3.4 k_b = min(e/3d0; p/3d0 - 0.25; f_ub/f_u; 1)', near(bb.kb, 50 / 54 - 0.25), String(bb.kb));
+ok('10.3.4 V_dpb = 2.5 k_b d t f_u / gamma_mb', near(bb.Vdpb, 2.5 * bb.kb * 16 * 6 * 410 / 1.25));
+bb = RD.boltBearingCapacity(b16, { e: 100, d0: 18, t: 6, fu: 410, pitch: undefined });
+ok('10.3.4 k_b limited by 1.0 or f_ub/f_u', near(bb.kb, 1));
+ok('10.3.4 oversize / long slot reductions 0.7 / 0.5', near(RD.boltBearingCapacity(b16, { e: 100, d0: 18, t: 6, fu: 410, hole: 'oversize-short-slot' }).Vdpb, 0.7 * bb.Vdpb) && near(RD.boltBearingCapacity(b16, { e: 100, d0: 18, t: 6, fu: 410, hole: 'long-slot' }).Vdpb, 0.5 * bb.Vdpb));
+let tn = RD.boltTensionCapacity(b16);
+ok('10.3.5 T_nb = min(0.9 f_ub A_n; f_yb A_sb gamma_mb/gamma_m0)', near(tn.Tnb, Math.min(0.9 * 800 * 157, 640 * b16.Asb * 1.25 / 1.10)) && near(tn.Tdb, tn.Tnb / 1.25), JSON.stringify(tn));
+ok('10.3.6 interaction', near(RD.boltCombined(30, 60, 40, 80), 0.5));
+
+// ---- 10.2: geometry
+ok('Table 19: clearances', RD.standardClearance(12) === 1 && RD.standardClearance(14) === 1 && RD.standardClearance(16) === 2 && RD.standardClearance(22) === 2 && RD.standardClearance(24) === 2 && RD.standardClearance(27) === 3 && RD.standardClearance(10) === null);
+let g = RD.boltGeometry({ d: 12, pitch: 29, e1: 25, edge: 'rolled' });
+ok('10.2.2 pitch < 2.5 d refused', !g.ok && g.messages.some((m) => /10\.2\.2/.test(m)));
+ok('10.2.4.2 end distance < 1.5 d_0 refused (d_0 = 13: 19.5 mm)', !RD.boltGeometry({ d: 12, e1: 19, edge: 'rolled' }).ok && RD.boltGeometry({ d: 12, e1: 20, edge: 'rolled' }).ok);
+ok('10.2.4.2 sheared edge 1.7 d_0', !RD.boltGeometry({ d: 12, e1: 21, edge: 'sheared' }).ok && RD.boltGeometry({ d: 12, e1: 23, edge: 'sheared' }).ok);
+ok('geometry: d < 12 mm is outside Table 19', RD.boltGeometry({ d: 10, e1: 30, edge: 'rolled' }).d0 === null);
+
+// ---- the joist restraint in the designer
+const base: any = { ...SCHEMA.defaults(), sbi_rst: 'joist', j_sec: 'box', j_b: 60, j_h: 60, j_t: 3, j_d: 12, j_nb: 2, j_p: 40, j_k: 1, j_anR: 50, j_Kc: 20, j_Ka: 100, j_e1: 30, j_anch: 'bay' };
+const joist = (o: any = {}) => { const r: any = MODEL.compute({ ...base, ...o }); if (r.fatal) throw new Error('fatal: ' + r.msgs.filter((m: any) => m.level === 'error').map((m: any) => m.text)); return { r, j: r.mods.sbi.restrInfo.joist, sb: r.mods.sbi }; };
+const st = (j: any, re: RegExp) => j.checks.filter((c: any) => re.test(c.name));
+let { j } = joist();
+ok('verified mode: the secondary-side bearing on cold-formed material needs IS 801: pending, so the joist is NOT credited', !j.credited && /IS 801/.test(j.reason) && st(j, /secondary \(cold-formed\)/)[0].status === 'REVIEW');
+ok('the restraint force check is a demand of 2.5 % F_cf / n (at least 1 %)', Math.abs(st(j, /Restraint force/)[0].Ed - j.demand.perPoint) < 1e-9 && j.demand.perPoint >= 0.01 * j.demand.Fcf - 1e-9);
+ok('hollow-section joist: the verified IS 800 member checks are calculated', st(j, /Joist member: Compression/).length === 3 && st(j, /Joist member: Compression/).every((c: any) => c.status === 'PASS'));
+ok('connection: bolts are checked with the verified IS 800 10.3 equations (PASS, not REVIEW)', st(j, /bolts: shear/)[0].status === 'PASS' && st(j, /bearing on the joist wall/)[0].status === 'PASS');
+
+// inadequate anchorage capacity -> FAIL; no anchorage -> FAIL; unknown capacity -> REVIEW
+let x = joist({ j_anR: 0.01 }).j;
+ok('anchorage capacity below the demand -> FAIL', st(x, /capacity of the anchorage/)[0].status === 'FAIL' && !x.credited);
+x = joist({ j_anch: 'none' }).j;
+ok('not anchored -> FAIL (8.3.4: no mutual dependence), never credited', st(x, /Load path/)[0].status === 'FAIL' && !x.credited && /not anchored/.test(x.reason));
+x = joist({ j_anR: '' }).j;
+ok('unknown anchorage capacity -> REVIEW, nothing assumed', st(x, /capacity of the anchorage/)[0].status === 'REVIEW');
+
+// joist member: too slender / too small -> FAIL; effective length missing -> REVIEW; angle -> REVIEW
+x = joist({ j_b: 20, j_h: 20, j_t: 1.5, j_k: 3, j_q: 5 }).j;
+ok('a joist that cannot carry the restraint force + its load -> FAIL', st(x, /Joist member/).some((c: any) => c.status === 'FAIL'), st(x, /Joist member/).map((c: any) => c.status).join());
+x = joist({ j_k: '' }).j;
+ok('no effective-length factor -> the joist member is pending', st(x, /Joist member/).some((c: any) => c.status === 'REVIEW' && c.pending));
+x = joist({ j_sec: 'L' }).j;
+ok('angle joist -> pending (IS 800 7.5)', st(x, /Joist member/)[0].pending === true && /7\.5/.test(st(x, /Joist member/)[0].clause));
+x = joist({ j_sec: 'C' }).j;
+ok('lipped-C joist -> pending (IS 801)', st(x, /Joist member/)[0].pending === true && /IS 801/.test(st(x, /Joist member/)[0].clause));
+
+// connection: weak connection -> FAIL (many joists need a bigger bolt), geometry violation -> FAIL
+x = joist({ j_d: 12, j_nb: 1, j_t: 3, j_b: 200, j_h: 200, j_n: 1, sbi_t: 2 }).j;
+const f1 = st(x, /bolts: shear/)[0];
+ok('bolt shear capacity responds to the number of bolts: one bolt carries all of the force', f1.eta > st(j, /bolts: shear/)[0].eta);
+x = joist({ j_e1: 10 }).j;
+ok('end distance below 1.5 d_0 -> FAIL (10.2.4.2)', st(x, /spacing and end distance/)[0].status === 'FAIL');
+x = joist({ j_d: 10 }).j;
+ok('bolt below 12 mm: hole clearance not covered -> REVIEW', st(x, /hole clearance/)[0].status === 'REVIEW');
+
+// restraint force changes with the joist number and spacing
+const a2 = joist({ j_n: 2 }).j, a8 = joist({ j_n: 8 }).j;
+ok('more joists: 1 % per point governs and the total to the supports grows', a8.demand.perPoint <= a2.demand.perPoint && a8.demand.anchorage >= a2.demand.anchorage);
+
+// stiffness is modelled, never assumed rigid
+x = joist({ j_Kc: '' }).j;
+ok('unknown connection stiffness -> not modelled, REVIEW', st(x, /stiffness K_J/)[0].status === 'REVIEW' && !x.credited);
+const kLow = joist({ j_Kc: 0.5 }).j.kJ, kHigh = joist({ j_Kc: 500 }).j.kJ;
+ok('K_J = 1/(L/EA + 2/Kc + 1/Ka) responds to the connection stiffness', kLow < kHigh && kHigh < 100e3);
+
+// user-defined mode: credited with a justification, labelled, with the real K_J; stability results follow
+const none = joist({ j_cred: 'verified' });
+const usr = joist({ j_cred: 'user', j_credJ: 'bolted tabs to the SB-Int top flange, anchored to the braced bay' });
+const usrLow = joist({ j_cred: 'user', j_credJ: 'x', j_Kc: 0.05, j_Ka: 0.5 });
+ok('user-defined mode: credited, labelled USER-DEFINED, with a REVIEW line', usr.j.credited && /USER-DEFINED/.test(usr.j.reason) && usr.j.checks.some((c: any) => /User-defined joist restraint/.test(c.name) && c.status === 'REVIEW'));
+ok('user-defined mode without justification: not credited', !joist({ j_cred: 'user', j_credJ: '' }).j.credited);
+ok('user-defined mode does not hide a failing check', joist({ j_cred: 'user', j_credJ: 'x', j_anR: 0.01 }).j.checks.some((c: any) => c.status === 'FAIL'));
+ok('stability of the secondary follows the restraint: M_cr credited > M_cr verified-mode (not credited)', usr.sb.Mcr > none.sb.Mcr * 1.05, `${usr.sb.Mcr} vs ${none.sb.Mcr}`);
+ok('a softer restraint gives a lower M_cr than a stiff one', usrLow.sb.Mcr < usr.sb.Mcr && usrLow.sb.Mcr >= none.sb.Mcr);
+ok('M_cr of the verified-mode (uncredited) run equals the run without joists', near(none.sb.Mcr, joist({ sbi_rst: 'none' }).sb.Mcr, 1e-9));
+ok('the restraint list of the secondary marks credited / not credited consistently', none.sb.spec.restr.lat.every((q: any) => !q.credited) && usr.sb.spec.restr.lat.length === 5 && usr.sb.spec.restr.lat.every((q: any) => q.credited));
+ok('no check of the joist cites another standard', [...none.j.checks, ...usr.j.checks].every((c: any) => !/EN ?1993|AISC|AISI/.test(c.clause + c.name + c.note)));
+
+console.log(`${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

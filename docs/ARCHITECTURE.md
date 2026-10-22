@@ -6,7 +6,7 @@ The starting point was one file, `index.html` (about 730 KB, 6,800 lines), writt
 
 | Part | Content | Where it ran |
 |---|---|---|
-| Calculation engine | section properties, EN 1993-1-3 effective widths, finite-strip method, beam FE and Vlasov thin-walled FE, load combinations, member checks, resistances, connections, box column, base plate, restraints, model orchestration | browser |
+| Calculation engine | section properties, beam FE and Vlasov thin-walled FE, load combinations, member demands (resistances of cold-formed sections pending: IS 801), connections, box column (verified IS 800 hollow-section design), base plate, restraints, model orchestration; IS 800:2007 only | browser |
 | Optimiser | parametric search over the full system model | browser |
 | Drawings | DXF / SVG generation | browser |
 | Reference data | reference results for the self-test, QA log, methods text | in the same file |

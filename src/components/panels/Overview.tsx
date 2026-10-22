@@ -101,16 +101,13 @@ export function GenPanel() {
             ['ULS combination', R.ulsText, ''],
             ['SLS', R.slsText, ''],
             ['E / G', `${F(R.E, 0)} / ${F(R.E / (2 * (1 + +I.nu)), 0)} N/mm²`, ''],
-            ['Partial factors', R.code === 'EN' ? `γM0 ${R.gM0}, γM1 ${R.gM1}, γM2 ${R.gM2}` : R.code === 'AISI' ? 'φ factors per AISI S100-16 / AISC 360-16 (shown in each check)' : 'γm0 1.10, γm1 1.25, γmb 1.25, γmw 1.25 (IS 800 Table 5)', ''],
+            ['Partial factors', 'γm0 1.10, γm1 1.25, γmb 1.25, γmw 1.25 (IS 800 Table 5)', ''],
           ]}
         />
-        {R.code !== 'EN' && (
-          <p className="note">
-            {R.code === 'IS'
-              ? 'IS route: IS 800:2007 is applied to the column, base, plates and bolts. IS 801 (cold-formed members) uses withdrawn working-stress methods, so the C-section member resistances are reported as REVIEW; no EN value is presented under an IS label.'
-              : 'AISI route: members by AISI S100-16 DSM (local / distortional from the finite-strip signature curve), connections and the column by AISC 360-16 (LRFD).'}
-          </p>
-        )}
+        <p className="note">
+          IS 800:2007 is the only design standard. Provisions that are not verified in the code register (IS 801 for cold-formed members, connections, column bases, angle struts, …) give
+          REVIEW, never PASS: the demand is shown and the resistance is pending. No value of another standard is presented under an IS label.
+        </p>
       </Card>
       <Card>
         <h3>Load path (kg/m² → kN)</h3>

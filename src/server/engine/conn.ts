@@ -1,4 +1,6 @@
-// @ts-nocheck — ported verbatim from the mockup (index.html, 60_conn.js); logic unchanged so results match the mockup.
+// @ts-nocheck — ported from the mockup (index.html, 60_conn.js). IS 800:2007 only: Section 10 (connections) is NOT verified in the code register, so every connection check that
+// cites it is reported as REVIEW by CHK.mk (indicative values); provisions of the removed design route were deleted and the joint stiffness / classification, end-plate prying,
+// column-wall and thin-sheet components are pending.
 import "server-only";
 import { U } from '@/shared/util';
 import { CHK } from '@/shared/check';
@@ -22,7 +24,7 @@ export const CONN: any = (() => {
     const T = TYPES[c.type] || TYPES.fin, checks = [], msgs = [], add = k => { checks.push(k); return k; };
     const grp = x.title;
     const p = mem.p, t = p.t, H = p.H, nWebs = mem.arr === 'single' ? 1 : 2, tWeb = nWebs * t; // bearing thickness of the supported web(s)
-    const d = +c.d, d0 = c.d0 > 0 ? +c.d0 : d0auto(d, c.hole), dw = c.wsh === 'std' ? 2 * d + 0 : 1.6 * d; // washer OD ≈ 2d (EN ISO 7089), else head ≈ 1.6 d
+    const d = +c.d, d0 = c.d0 > 0 ? +c.d0 : d0auto(d, c.hole), dw = c.wsh === 'std' ? 2 * d + 0 : 1.6 * d; // washer OD ≈ 2d, else head ≈ 1.6 d
     const nv = Math.round(c.nv), nh = T.cBolts ? Math.round(c.nh) : 0, nb = nv * nh;
     const zs = U.range(nv, i => +c.z1 + i * c.p1), ys = U.range(Math.max(nh, 1), j => +c.es + j * c.p2);
     const zg = (zs[0] + zs[zs.length - 1]) / 2, yg = (ys[0] + ys[ys.length - 1]) / 2;
@@ -37,15 +39,14 @@ export const CONN: any = (() => {
     const fy = mem.fy, fu = mem.fu, pfy = +c.pfy, pfu = +c.pfu, tp = +c.tp, hp = +c.hp, zp = +c.zp, bp = +c.bp;
     const geo = { type: c.type, H, t, r: p.r, B: p.Bt, C: p.Ct, zs, ys, d, d0, dw, tp, hp, zp, bp, gapTot, offMB, e, zg, yg, nWebs, sup: sup.kind, adj: [] };
     // ---------- geometry feasibility ----------
-    const pmin = thin ? 3 * d0 : 2.2 * d0, emin = thin ? 1.0 * d0 : 1.2 * d0, e2min = thin ? 1.5 * d0 : 1.2 * d0;
+    const pmin = 2.5 * d, emin = 1.5 * d0, e2min = 1.5 * d0; // IS 800:2007 10.2.2 (pitch ≥ 2.5 d), 10.2.4.2 (edge distance ≥ 1.5 d_0): not verified in the register
     const feas = [], warn = [];
     if (T.cBolts) {
       if (zs[0] - dw / 2 < flat0 - 1e-6) feas.push(`First bolt too close to the top flange: washer edge at ${U.fmt(zs[0] - dw / 2, 1)} mm, flat web starts at ${U.fmt(flat0, 1)} mm`);
       if (zs[zs.length - 1] + dw / 2 > flat1 + 1e-6) feas.push(`Last bolt too close to the bottom flange: washer edge at ${U.fmt(zs[zs.length - 1] + dw / 2, 1)} mm, flat web ends at ${U.fmt(flat1, 1)} mm`);
-      if (nv > 1 && c.p1 < pmin - 1e-6) feas.push(`p_1 = ${c.p1} < ${U.fmt(pmin, 1)} mm (${thin ? 'EN 1993-1-3 Table 8.4: 3 d_0' : 'EN 1993-1-8 Table 3.3: 2.2 d_0'})`);
+      if (nv > 1 && c.p1 < pmin - 1e-6) feas.push(`p_1 = ${c.p1} < ${U.fmt(pmin, 1)} mm (IS 800:2007 10.2.2: 2.5 d)`);
       if (nh > 1 && c.p2 < pmin - 1e-6) feas.push(`p_2 = ${c.p2} < ${U.fmt(pmin, 1)} mm`);
       if (c.es < Math.max(emin, e2min) - 1e-6) feas.push(`End distance e_s = ${c.es} < ${U.fmt(Math.max(emin, e2min), 1)} mm (C end)`);
-      if (c.p1 > Math.min(14 * Math.max(t, tp), 200) && nv > 1) warn.push(`p_1 = ${c.p1} mm exceeds min(14 t, 200) = ${U.fmt(Math.min(14 * Math.max(t, tp), 200), 0)} mm: this EN 1993-1-8 Table 3.3 maximum applies to compression members, not to this shear connection (information only)`);
     }
     // maximum number of rows that fit
     const zLastMax = flat1 - dw / 2, nMax = T.cBolts ? Math.max(0, Math.floor((zLastMax - Math.max(+c.z1, flat0 + dw / 2)) / Math.max(pmin, 1)) + 1) : 0;
@@ -53,10 +54,10 @@ export const CONN: any = (() => {
     let eP1t = NaN, eP1b = NaN, eP2 = NaN;
     if (T.plate && T.cBolts) {
       eP1t = zs[0] - zp; eP1b = zp + hp - zs[zs.length - 1]; eP2 = bp - (gapTot + ys[ys.length - 1]);
-      const pe = 1.2 * d0;
-      if (eP1t < pe - 1e-6) feas.push(`Plate top edge to the first bolt ${U.fmt(eP1t, 1)} < 1.2 d_0 = ${U.fmt(pe, 1)} mm`);
-      if (eP1b < pe - 1e-6) feas.push(`Plate bottom edge to the last bolt ${U.fmt(eP1b, 1)} < 1.2 d_0 = ${U.fmt(pe, 1)} mm`);
-      if (eP2 < pe - 1e-6) feas.push(`Plate free edge to the bolt column ${U.fmt(eP2, 1)} < 1.2 d_0 = ${U.fmt(pe, 1)} mm (increase the projection b_p)`);
+      const pe = 1.5 * d0;
+      if (eP1t < pe - 1e-6) feas.push(`Plate top edge to the first bolt ${U.fmt(eP1t, 1)} < 1.5 d_0 = ${U.fmt(pe, 1)} mm`);
+      if (eP1b < pe - 1e-6) feas.push(`Plate bottom edge to the last bolt ${U.fmt(eP1b, 1)} < 1.5 d_0 = ${U.fmt(pe, 1)} mm`);
+      if (eP2 < pe - 1e-6) feas.push(`Plate free edge to the bolt column ${U.fmt(eP2, 1)} < 1.5 d_0 = ${U.fmt(pe, 1)} mm (increase the projection b_p)`);
     }
     if (zp < 0 || zp + hp > H + 1e-6) feas.push(`The plate (${zp} … ${zp + hp} mm) extends beyond the C depth ${H} mm`);
     if (c.type === 'ucleat' && (zp < flat0 || zp + hp > flat1)) feas.push(`U-cleat: the inner leg must fit the flat web between the C flanges (${U.fmt(flat0, 1)} … ${U.fmt(flat1, 1)} mm)`);
@@ -71,7 +72,7 @@ export const CONN: any = (() => {
     geo.adj = adj.holes;
     // ---------- resistances ----------
     const planes = T.planes;
-    const bs = P.boltShear(d, c.bg, planes, c.thr === 'yes');
+    const bs = P.boltShear(d, c.bg, planes, c.thr === 'yes', nv > 1 ? (nv - 1) * +c.p1 : 0, tWeb + tp * planes);
     // bolt forces on the C-side group (elastic, polar)
     let Fb = 0, Fv1 = 0, Fh1 = 0, Ip = 0;
     if (T.cBolts) {
@@ -91,13 +92,12 @@ export const CONN: any = (() => {
       add(CHK.mk({ grp, name: `Bolt shear (C web bolts, ${planes} shear plane${planes > 1 ? 's' : ''})`, clause: bs.clause, Ed: Fb, Rd: bs.Rd, unit: 'kN', fmt: kN, steps: [...forceSteps, ...bs.steps], basis: bs.basis || 'code', eq: 'F_b,Ed ≤ F_v,Rd', why: why.shear, fix: fix.shear }));
       // bearing on the C web
       const eC1 = +c.es, eC2 = Math.min(zs[0], H - zs[zs.length - 1]) - flat0;
-      const b1 = thin ? P.bearingThin(d, d0, tWeb > t && nWebs > 1 ? t : t, fu, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0) : P.bearingPlate(d, d0, t, fu, c.bg, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0);
+      const b1 = thin ? P.bearingThin(d, d0, tWeb > t && nWebs > 1 ? t : t, fu, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0) : P.bearingPlate(d, d0, t, fu, c.bg, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0, c.hole);
       const bRdC = b1.Rd * nWebs;
-      add(CHK.mk({ grp, name: `Bearing on the C web${nWebs > 1 ? 's (' + nWebs + ' webs)' : ''}`, clause: b1.clause, Ed: Fb, Rd: bRdC, unit: 'kN', fmt: kN, steps: [s('e_1 (to the C end)', '', eC1, 'mm'), s('e_2 (to the flange corner)', '', eC2, 'mm'), ...b1.steps], basis: b1.basis || 'code', review: b1.valid === false && P.code === 'EN' ? false : false, note: b1.note || '', eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearC, fix: fix.bearC }));
-      if (P.code === 'EN' && thin) add(CHK.mk({ grp, name: 'Deformation capacity: F_v,Rd ≥ 1.2 F_b,Rd (thin sheet)', clause: 'EN 1993-1-3 Table 8.4 condition for bolted thin sheet (verify)', Ed: 1.2 * b1.Rd, Rd: bs.Rd / planes, unit: 'kN', fmt: kN, basis: 'approx', eq: '1.2 F_b,Rd ≤ F_v,Rd', note: 'Ensures the bolt does not shear before the sheet bears (ductile failure).' }));
+      add(CHK.mk({ grp, name: `Bearing on the C web${nWebs > 1 ? 's (' + nWebs + ' webs)' : ''}`, clause: b1.clause, Ed: Fb, Rd: bRdC, unit: 'kN', fmt: kN, steps: [s('e_1 (to the C end)', '', eC1, 'mm'), s('e_2 (to the flange corner)', '', eC2, 'mm'), ...b1.steps], basis: b1.basis || 'code', note: b1.note || '', eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearC, fix: fix.bearC }));
       // bearing on plate / legs
       const legs = c.type === 'ucleat' ? 2 : 1, eP1 = Math.min(eP1t, eP1b, eP2), eP2b = Math.min(eP1t, eP2);
-      const bp1 = P.bearingPlate(d, d0, tp, pfu, c.bg, eP1, eP2b, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0);
+      const bp1 = P.bearingPlate(d, d0, tp, pfu, c.bg, eP1, eP2b, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0, c.hole);
       add(CHK.mk({ grp, name: `Bearing on the ${c.type === 'ucleat' ? 'U-cleat legs (V/2 each)' : c.type === 'angle' ? 'angle leg' : 'plate'}`, clause: bp1.clause, Ed: Fb / legs, Rd: bp1.Rd, unit: 'kN', fmt: kN, steps: [s('e (min edge)', '', eP1, 'mm'), ...bp1.steps], eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearP, fix: fix.bearP }));
       // net shear of the C web along the bolt column (with adjustment holes in the same line)
       const hNet = (H - 2 * t) - nv * d0 - adj.inBoltLine * adj.dv;
@@ -107,12 +107,10 @@ export const CONN: any = (() => {
         const h2 = (H - 2 * t) - adj.n * adj.dv, sr2 = P.shearRupture(h2 * t * nWebs, fu);
         add(CHK.mk({ grp, name: 'C web net shear along the adjustment-hole line', clause: sr2.clause, Ed: V, Rd: sr2.Rd, unit: 'kN', fmt: kN, basis: sr2.basis || 'code', steps: [s('h_net', `(H − 2t) − ${adj.n} × ${U.fmt(adj.dv, 1)}`, h2, 'mm'), ...sr2.steps] }));
       }
-      if (N > 0) {
-        const An = ((H - 2 * t) - nv * d0) * t * nWebs, Rn = An * fu / (P.gM2 || 1.25);
-        add(CHK.mk({ grp, name: 'C web net section in tension (restraint force)', clause: 'EN 1993-1-3 Table 8.4 (net section, upper bound A_net f_u/γM2 – verify)', Ed: N, Rd: Rn, unit: 'kN', fmt: kN, basis: 'approx', steps: [s('A_net', '', An, 'mm²')] }));
-      } else add(CHK.na({ grp, name: 'C web net section in tension', clause: 'EN 1993-1-3 8.4' }, 'No axial tension in this connection.'));
-      add(CHK.na({ grp, name: 'Block tearing of the C web', clause: 'EN 1993-1-8 3.10.2' }, 'Uncoped C: the flanges are continuous above and below the bolt group, so no tear-out block can form; tear-out towards the C end is covered by the bearing check with e_1 = e_s.'));
-      if (c.hole === 'slotV') add(CHK.mk({ grp, name: 'Slotted holes parallel to the reaction', clause: 'EN 1993-1-8 3.4 / 3.9 (slip-resistant category B/C needed)', review: true, note: 'Use preloaded bolts designed for slip, or turn the slot horizontal.', why: 'The joint can slip along the slot.', fix: 'Preloaded bolts or horizontal slots.' }));
+      if (N > 0) add(CHK.pending({ grp, name: 'C web net section in tension (restraint force)', clause: 'IS 800:2007 6.3', Ed: N, unit: 'kN', fmt: kN }, 'Rupture of the net section (6.3) is pending in the code register and the thin-web rule needs IS 801.'));
+      else add(CHK.na({ grp, name: 'C web net section in tension', clause: '' }, 'No axial tension in this connection.'));
+      add(CHK.na({ grp, name: 'Block tearing of the C web', clause: 'IS 800:2007 6.4' }, 'Uncoped C: the flanges are continuous above and below the bolt group, so no tear-out block can form; tear-out towards the C end is covered by the bearing check with e_1 = e_s.'));
+      if (c.hole === 'slotV') add(CHK.mk({ grp, name: 'Slotted holes parallel to the reaction', clause: 'IS 800:2007 10.4 (slip-resistant connection)', review: true, note: 'Use preloaded bolts designed for slip, or turn the slot horizontal.', why: 'The joint can slip along the slot.', fix: 'Preloaded bolts or horizontal slots.' }));
     } else {
       add(CHK.na({ grp, name: 'C web bolts (shear, bearing, net section)', clause: '' }, 'No bolts in the C web for this arrangement.'));
     }
@@ -131,18 +129,13 @@ export const CONN: any = (() => {
       const W = tp * hp * hp / 6, Vpl = sy.Rd, rho = Vp > 0.5 * Vpl ? (2 * Vp / Vpl - 1) ** 2 : 0, pb = P.plateBending(W, pfy, rho);
       add(CHK.mk({ grp, name: `Plate bending at the support face (V e)${legs > 1 ? ' per leg' : ''}`, clause: pb.clause, Ed: Mp, Rd: pb.Rd, unit: 'kNm', fmt: x => x / 1e6, steps: [s('e', '', e, 'mm'), s('W_el', 't_p h_p²/6', W, 'mm³'), ...pb.steps], why: why.bend, fix: fix.bend }));
       if (e > tp / 0.15) {
-        // cantilever plate, tip load at mid-depth: P_cr = 4.013 √(E I_z G I_t)/L² (Timoshenko & Gere) → M_cr = P_cr L; χ_LT with curve d
-        const Es = x.E, Gs = x.E / 2.6, Iz = hp * tp ** 3 / 12, It = hp * tp ** 3 / 3 * (1 - 0.63 * tp / hp), Mcr = 4.013 * Math.sqrt(Es * Iz * Gs * It) / e;
-        const lam = Math.sqrt(W * pfy / Mcr), xl = MEM.chi(lam, 0.76), gm1 = R.code === 'AISI' ? 1 / 0.9 : (R.gM1 || 1), MbRd = xl * W * pfy / gm1;
-        add(CHK.mk({ grp, name: `Long plate: lateral-torsional buckling${legs > 1 ? ' per leg' : ''}`, clause: 'Cantilever plate LTB, Timoshenko & Gere P_cr = 4.013 √(EI_z GI_t)/L²; χ_LT from EN 1993-1-1 6.3.2.2 curve d (documented approximation; SCI P358 requires a check when z_p > t_p/0.15)', Ed: Mp, Rd: MbRd, unit: 'kNm', fmt: x => x / 1e6, basis: 'approx',
-          steps: [s('L', 'e (support face to the bolt-group centroid)', e, 'mm'), s('M_cr', '4.013 √(E I_z G I_t) / L', Mcr / 1e6, 'kNm'), s('λ̄_LT', '√(W_el f_y / M_cr)', lam), s('χ_LT', 'curve d (α = 0.76)', xl), s('M_b,Rd', 'χ_LT W_el f_y / γM1', MbRd / 1e6, 'kNm')],
-          why: 'A long slender plate can buckle laterally under the eccentric shear.', fix: 'Thicker plate (t_p ≥ 0.15 e) or a shorter projection.' }));
-      } else add(CHK.na({ grp, name: 'Long plate stability', clause: 'SCI P358' }, `Short plate: e ≤ t_p/0.15 = ${U.fmt(tp / 0.15, 0)} mm.`));
+        add(CHK.pending({ grp, name: `Long plate: lateral-torsional buckling${legs > 1 ? ' per leg' : ''}`, clause: 'IS 800:2007 8.2.2', Ed: Mp, unit: 'kNm', fmt: x => x / 1e6, steps: [s('L', 'e (support face to the bolt-group centroid)', e, 'mm')], why: 'A long slender plate can buckle laterally under the eccentric shear.', fix: 'Thicker plate or a shorter projection.' }, 'The lateral-torsional buckling of a plate (IS 800 8.2.2 for rectangular sections) is not verified in the code register.'));
+      } else add(CHK.na({ grp, name: 'Long plate stability', clause: '' }, `Short plate: e ≤ t_p/0.15 = ${U.fmt(tp / 0.15, 0)} mm.`));
     } else add(CHK.na({ grp, name: 'Plate / cleat checks', clause: '' }, 'No separate plate in this arrangement.'));
     // ---------- welds ----------
     const Lw = c.Lw > 0 ? +c.Lw : hp, nw = Math.round(c.nw), a = +c.a;
     if (T.weldSup) {
-      if (!(a > 0)) add(CHK.mk({ grp, name: 'Weld of the plate to the support', clause: 'EN 1993-1-8 4.5', eta: Infinity, note: 'Weld throat a = 0.', fix: 'Enter the weld throat.' }));
+      if (!(a > 0)) add(CHK.mk({ grp, name: 'Weld of the plate to the support', clause: 'IS 800:2007 10.5', eta: Infinity, note: 'Weld throat a = 0.', fix: 'Enter the weld throat.' }));
       else {
         const Mw = eccToSupport ? V * e + Mj : Mj + (c.type === 'fin' || c.type === 'ucleat' || c.type === 'welded' ? V * e : 0);
         const vL = V / (nw * Lw), mL = Mw / (nw * Lw * Lw / 6), nL = N / (nw * Lw), f = Math.hypot(vL, mL + nL);
@@ -166,7 +159,7 @@ export const CONN: any = (() => {
       const Mw = V * ecc + Mj, rmax = Math.hypot(Math.max(ex, L2 - ex), L1 / 2);
       const fv = V / Ltot + Mw * Math.max(ex, L2 - ex) / Iw_, fh = N / Ltot + Mw * (L1 / 2) / Iw_, f = Math.hypot(fv, fh);
       const wr = P.weldPerLength(a, Math.min(fu, pfu));
-      if (!(a > 0)) add(CHK.mk({ grp, name: 'Weld to the C', clause: 'EN 1993-1-8 4.5', eta: Infinity, note: 'Weld throat a = 0.' }));
+      if (!(a > 0)) add(CHK.mk({ grp, name: 'Weld to the C', clause: 'IS 800:2007 10.5', eta: Infinity, note: 'Weld throat a = 0.' }));
       else {
         add(CHK.mk({ grp, name: 'Weld group on the C (throat)', clause: wr.clause, Ed: f, Rd: wr.Rd, unit: 'N/mm', fmt: x => x, steps: [s('weld group', c.type === 'endplate' ? 'web welds both sides' : 'end line + 2 lap lines', Ltot, 'mm'), s('M_w', 'V e_w + M_j', Mw / 1e6, 'kNm'), s('f_w,Ed', '', f, 'N/mm'), ...wr.steps] }));
         if (thin || t <= 4) {
@@ -185,8 +178,8 @@ export const CONN: any = (() => {
       const bS = P.boltShear(d, c.bg, 1, c.thr === 'yes'), bT = P.boltTension(d, c.bg);
       add(CHK.mk({ grp, name: 'Support-side bolts: shear', clause: bS.clause, Ed: Vb, Rd: bS.Rd, unit: 'kN', fmt: kN, steps: [s('n', 'support-side bolts', ns), s('V/n', '', kN(Vb), 'kN'), ...bS.steps] }));
       if (Ft > 0) {
-        const comb = Vb / bS.Rd + Ft / (1.4 * bT.Rd);
-        add(CHK.mk({ grp, name: 'Support-side bolts: shear + tension', clause: P.code === 'EN' ? 'EN 1993-1-8 Table 3.4 (F_v/F_v,Rd + F_t/(1.4 F_t,Rd) ≤ 1)' : bT.clause + ' (interaction, EN form)', eta: Math.max(comb, Ft / bT.Rd), steps: [s('F_t,Ed', 'N/n (+ M/ΣR²)', kN(Ft), 'kN'), ...bT.steps], basis: P.code === 'EN' ? 'code' : 'approx' }));
+        const combIS = (Vb / bS.Rd) ** 2 + (Ft / bT.Rd) ** 2;
+        add(CHK.mk({ grp, name: 'Support-side bolts: shear + tension', clause: 'IS 800:2007 10.3.6 (combined shear and tension)', eta: Math.max(combIS, Ft / bT.Rd), steps: [s('F_t,Ed', 'N/n (+ M/ΣR²)', kN(Ft), 'kN'), s('(V/V_db)² + (T/T_db)²', '', combIS), ...bT.steps] }));
       }
       // bearing on the cleat / end plate
       const bpl = P.bearingPlate(d, d0, tp, pfu, c.bg, Math.min(+c.z1 - zp, 1.5 * d0 + 10), (+c.gs) / 2, nvs > 1 ? +c.p1 : 0, 0);
@@ -198,7 +191,7 @@ export const CONN: any = (() => {
         if (Ft > 0) {
           const pt = P.pullThrough(dw, tM * nwM, sup.mb.fu);
           const inter = Ft / pt.Rd + Vb / (bm.Rd * nwM);
-          add(CHK.mk({ grp, name: 'Main-beam web: pull-through + bearing at the bolts', clause: pt.clause + '; interaction F_t/F_p,Rd + F_v/F_b,Rd ≤ 1 (EN 1993-1-3 8.3(8) form)', eta: inter, basis: pt.basis || 'approx', steps: [s('d_w', 'washer / head diameter', dw, 'mm'), ...pt.steps], why: 'The thin main-beam web is pulled over the washer by the restraint force while bearing the reaction.', fix: 'Larger washers (up to the flat web), thicker main beam, or a backing plate.' }));
+          add(CHK.mk({ grp, name: 'Main-beam web: pull-through + bearing at the bolts', clause: pt.clause + '; interaction F_t/F_p,Rd + F_v/F_b,Rd ≤ 1', eta: inter, basis: pt.basis || 'none', steps: [s('d_w', 'washer / head diameter', dw, 'mm'), ...pt.steps], why: 'The thin main-beam web is pulled over the washer by the restraint force while bearing the reaction.', fix: 'Larger washers (up to the flat web), thicker main beam, or a backing plate.' }));
         }
         const hcl = Math.min(hp, mp.H - mp.Ct - mp.Cb);
         const ls = P.shearRupture(hcl * tM * nwM, sup.mb.fu);
@@ -208,69 +201,29 @@ export const CONN: any = (() => {
         add(CHK.mk({ grp, name: 'Bearing on the column wall', clause: bw.clause, Ed: Vb, Rd: bw.Rd, unit: 'kN', fmt: kN, steps: bw.steps, note: 'Bolting to a closed box needs through-bolts or blind (flow-drill / expansion) fasteners: resistance of blind fasteners from the manufacturer.' }));
         if (Ft > 0) add(CHK.mk({ grp, name: 'Column wall bending under bolt tension', clause: 'Yield-line model of the box wall (not implemented)', review: true, note: 'Tension on bolts into a box wall: verify the wall by a yield-line analysis or use through-bolts with a backing plate.' }));
       }
-      if (c.type === 'endplate' && N > 0) {
-        const m = Math.max(5, (+c.gs) / 2 - t / 2 - 0.8 * a * Math.SQRT2), en = Math.max(5, Math.min(1.25 * m, ((+c.bp) - (+c.gs)) / 2)), leff = Math.min(2 * Math.PI * m, 4 * m + 1.25 * en) * nvs;
-        const Mpl = 0.25 * leff * tp * tp * pfy / (P.gM0 || 1), Ft2 = 2 * nvs * bT.Rd;
-        const F1 = 4 * Mpl / m, F2 = (2 * Mpl + en * Ft2) / (m + en), F3 = Ft2, Ft = Math.min(F1, F2, F3);
-        add(CHK.mk({ grp, name: 'End plate in bending with prying (equivalent T-stub)', clause: 'EN 1993-1-8 6.2.4 (Table 6.2), circular / non-circular patterns combined conservatively', Ed: N, Rd: Ft, unit: 'kN', fmt: kN, basis: 'approx', steps: [s('m', '', m, 'mm'), s('l_eff', 'min(2πm, 4m + 1.25e) per row', leff, 'mm'), s('F_T,1', '4 M_pl,1/m', kN(F1), 'kN'), s('F_T,2', '(2 M_pl,2 + n ΣF_t,Rd)/(m + n)', kN(F2), 'kN'), s('F_T,3', 'ΣF_t,Rd', kN(F3), 'kN')] }));
-      }
-      // support-side stiffness (bolts in shear and bearing)
-      const kb = stiffBolt(d, c.bg, tp, pfu, sup.kind === 'mb' ? sup.mb.p.t * (sup.mb.arr === 'single' ? 1 : 2) : sup.col.t0, sup.kind === 'mb' ? sup.mb.fu : sup.col.fu, x.E, 2 * d0, +c.p1);
-      Ks = ns * kb.K;
+      if (c.type === 'endplate' && N > 0) add(CHK.pending({ grp, name: 'End plate in bending with prying (equivalent T-stub)', clause: 'IS 800:2007 10.4', Ed: N, unit: 'kN', fmt: kN }, 'Prying and the plate in bending are not verified in the code register (IS 800 Section 10).'));
     }
     // ---------- support local checks ----------
     if (sup.kind === 'col' && T.weldSup) {
-      const b0 = sup.col.b0, t0 = sup.col.t0, fy0 = sup.col.fy, legs = c.type === 'ucleat' ? 2 : 1, t1 = c.type === 'ucleat' ? (+c.bp) : tp;
-      const beta = Math.min(0.99, t1 / b0), km = Math.min(1, Math.max(0, 1.3 * (1 - (x.colStressRatio || 0))));
-      const N1 = km * fy0 * t0 * t0 / (1 - beta) * (2 * hp / b0 + 4 * Math.sqrt(1 - beta)) / P.gM5;
-      const MipRd = 0.5 * N1 * hp * (c.type === 'ucleat' ? 1.5 : 1);
-      const MEd = (eccToSupport ? V * e : V * e) + Mj;
-      add(CHK.mk({ grp, name: 'Box-column wall: plate moment V·e (local face bending)', clause: 'EN 1993-1-8 Table 7.13 (longitudinal plate, N_1,Rd; M_ip = 0.5 N_1,Rd h_1) / CIDECT DG 9 – verify scope', Ed: MEd, Rd: MipRd, unit: 'kNm', fmt: x => x / 1e6, basis: 'approx',
-        steps: [s('b_0 / t_0', '', b0 / t0), s('β', 't_1/b_0', beta), s('k_m', '1.3(1 − n) ≤ 1', km), s('N_1,Rd', 'k_m f_y0 t_0² (2h_1/b_0 + 4√(1−β))/(1−β)/γM5', kN(N1), 'kN'), s('M_ip,Rd', '0.5 N_1,Rd h_1' + (c.type === 'ucleat' ? ' × 1.5 (U-cleat base spreads the load – approximation)' : ''), MipRd / 1e6, 'kNm')],
-        note: b0 / t0 > 35 ? 'b_0/t_0 > 35: outside the validity range of EN 1993-1-8 Table 7.8 – review.' : '', review: b0 / t0 > 35,
-        why: 'The thin column wall bends inwards / outwards under the plate moment.', fix: 'Thicker column wall, a wider plate on the face (U-cleat / end plate), or an internal stiffener.' }));
-      const wsh = 2 * hp * t0 * fy0 / (Math.sqrt(3) * P.gM5);
-      add(CHK.mk({ grp, name: 'Box-column wall: punching shear along the welds', clause: 'EN 1993-1-8 7.5.2.1 basis (wall shear f_y0/√3 along 2 h_1)', Ed: V, Rd: wsh, unit: 'kN', fmt: kN, basis: 'approx' }));
+      const MEd = V * e + Mj;
+      add(CHK.pending({ grp, name: 'Box-column wall: plate moment V·e (local face bending) and punching along the welds', clause: 'IS 800:2007 10', Ed: MEd, unit: 'kNm', fmt: x => x / 1e6, why: 'The thin column wall bends under the plate moment.', fix: 'Thicker column wall, a wider plate on the face, or an internal stiffener.' }, 'The local resistance of a hollow-section wall is not covered by the verified provisions of IS 800.'));
     }
-    // ---------- stiffness and classification ----------
-    let Kc = Infinity, Sj = Infinity, kbC = null;
-    if (T.cBolts) {
-      kbC = stiffBolt(d, c.bg, tp * (c.type === 'ucleat' ? 2 : 1), pfu, t * nWebs, fu, x.E, Math.min(+c.es, 2 * d0 + 20), nv > 1 ? +c.p1 : 2 * d);
-      const n2 = c.type === 'ucleat' ? 2 : 1; // double shear doubles the bolt shear stiffness
-      Kc = nb * kbC.K * n2; Sj = kbC.K * n2 * Ip;
-    } else {
-      // welded C side: plate in-plane bending as a cantilever of length e (documented approximation)
-      const Ipl = tp * hp ** 3 / 12; Sj = x.E * Ipl / Math.max(e, 10) * 3; Kc = x.E * tp * hp / Math.max(e, 10);
-    }
-    if (isFinite(Ks)) { Kc = 1 / (1 / Kc + 1 / Ks); }
-    const EIb = x.E * mem.I, Lb = mem.L;
-    const cls = Sj <= 0.5 * EIb / Lb ? 'nominally pinned' : Sj >= 8 * EIb / Lb ? 'rigid' : 'semi-rigid';
-    const stiff = { Kc, Sj, kbC, cls, rigidLim: 8 * EIb / Lb, pinLim: 0.5 * EIb / Lb, Ks };
-    add(CHK.mk({ grp, name: 'Joint classification by stiffness', clause: 'EN 1993-1-8 5.2.2.5 (braced frame) with S_j,ini from 6.3 / Table 6.11 components', eta: 0, basis: 'code',
-      steps: [s('S_j,ini', 'K_b Σr² (bolts in shear + bearing)' + (T.cBolts ? '' : ' (welded: plate cantilever stiffness)'), Sj / 1e6, 'kNm/rad'), s('0.5 E I_b/L_b', '', 0.5 * EIb / Lb / 1e6, 'kNm/rad'), s('8 E I_b/L_b', '', 8 * EIb / Lb / 1e6, 'kNm/rad'), s('class', '', cls)],
-      note: `Classified ${cls}. ${c.cls === 'pin' && cls !== 'nominally pinned' ? 'Analysed as pinned (conservative for the span); the connection is checked for the end moment M_j from the stiffness so it is not overloaded.' : ''}` }));
+    // ---------- joint stiffness: not available ----------
+    // The rotational and lateral stiffness of the joint came from a component method of the removed design route. IS 800 gives no verified equivalent: the joint is
+    // analysed as nominally pinned (the input "Joint model" offers only that), no joint restraint is credited to the lateral-torsional buckling of the supported member.
+    const stiff = { Kc: 0, Sj: 0, kbC: null, cls: 'nominally pinned', rigidLim: NaN, pinLim: NaN, Ks: Infinity };
+    add(CHK.mk({ grp, name: 'Joint stiffness and classification', clause: '', review: true, note: 'Nominally pinned by input. Joint stiffness is not calculated (no verified IS 800 provision): no rotational or lateral restraint of the joint is credited in the analysis of the supported member.' }));
     // fork restraint at the member end
     const fork = (T.cBolts ? nv >= 2 : true) && (T.plate ? hp >= 0.6 * (H - 2 * t) : true);
-    add(fork ? CHK.mk({ grp, name: 'Torsional (fork) restraint at the member end', clause: 'Detailing rule: plate depth ≥ 0.6 × web depth and ≥ 2 bolt rows (SCI P358 practice – documented approximation)', eta: 0, basis: 'approx', note: 'Fork support assumed in the LTB model.' })
-      : CHK.mk({ grp, name: 'Torsional (fork) restraint at the member end', clause: 'Detailing rule: plate depth ≥ 0.6 × web depth and ≥ 2 bolt rows', review: true, note: 'The end connection is too shallow to demonstrate a fork support; the LTB model assumes a fork – review.', fix: 'Deeper cleat with at least 2 bolt rows.' }));
+    add(fork ? CHK.mk({ grp, name: 'Torsional (fork) restraint at the member end', clause: 'detailing rule: plate depth ≥ 0.6 × web depth and ≥ 2 bolt rows (documented approximation)', eta: 0, basis: 'approx', note: 'Fork support assumed in the LTB model.' })
+      : CHK.mk({ grp, name: 'Torsional (fork) restraint at the member end', clause: 'detailing rule', review: true, note: 'The end connection is too shallow to demonstrate a fork support; the LTB model assumes a fork – review.', fix: 'Deeper cleat with at least 2 bolt rows.' }));
     // geometry feasibility record
-    add(feas.length ? CHK.mk({ grp, name: 'Geometry, edge distances and spacing', clause: thin ? 'EN 1993-1-3 Table 8.4; EN 1993-1-8 Table 3.3' : 'EN 1993-1-8 Table 3.3', eta: Infinity, note: feas.concat(warn).join('. ') + '.', why: 'The bolt / plate layout does not fit the section or violates the minimum spacing.', fix: `Adjust z_1, p_1, plate depth or projection. Up to ${nMax} bolt rows fit at the minimum pitch.` })
-      : CHK.mk({ grp, name: 'Geometry, edge distances and spacing', clause: thin ? 'EN 1993-1-3 Table 8.4; EN 1993-1-8 Table 3.3' : 'EN 1993-1-8 Table 3.3', eta: 0, note: `Layout fits.${warn.length ? ' ' + warn.join('. ') + '.' : ''} Up to ${nMax} bolt rows fit at the minimum pitch ${U.fmt(pmin, 1)} mm.` }));
-    if (adj.n > 0) add(adj.msgs.length ? CHK.mk({ grp, name: 'Additional (adjustment) holes', clause: 'EN 1993-1-3 Table 8.4 spacing; geometric fit', eta: Infinity, note: adj.msgs.join('. ') + '.', fix: `At most ${adj.nMax} holes fit at this pitch.` })
-      : CHK.mk({ grp, name: 'Additional (adjustment) holes', clause: 'EN 1993-1-3 Table 8.4 spacing; geometric fit', eta: 0, note: `${adj.n} holes fit (maximum ${adj.nMax}); included in the net-shear check.` }));
+    add(feas.length ? CHK.mk({ grp, name: 'Geometry, edge distances and spacing', clause: 'IS 800:2007 10.2', eta: Infinity, note: feas.concat(warn).join('. ') + '.', why: 'The bolt / plate layout does not fit the section or violates the minimum spacing.', fix: `Adjust z_1, p_1, plate depth or projection. Up to ${nMax} bolt rows fit at the minimum pitch.` })
+      : CHK.mk({ grp, name: 'Geometry, edge distances and spacing', clause: 'IS 800:2007 10.2', eta: 0, note: `Layout fits.${warn.length ? ' ' + warn.join('. ') + '.' : ''} Up to ${nMax} bolt rows fit at the minimum pitch ${U.fmt(pmin, 1)} mm.` }));
+    if (adj.n > 0) add(adj.msgs.length ? CHK.mk({ grp, name: 'Additional (adjustment) holes', clause: 'IS 800:2007 10.2 spacing; geometric fit', eta: Infinity, note: adj.msgs.join('. ') + '.', fix: `At most ${adj.nMax} holes fit at this pitch.` })
+      : CHK.mk({ grp, name: 'Additional (adjustment) holes', clause: 'IS 800:2007 10.2 spacing; geometric fit', eta: 0, note: `${adj.n} holes fit (maximum ${adj.nMax}); included in the net-shear check.` }));
     for (const m of msgs) add(CHK.mk({ grp, name: 'Detail note', clause: '', review: true, note: m }));
     return { checks, geo, stiff, e, Fb, nMax, feas, adj, typeName: T.name, T, fork, torqueToSupport: eccToSupport ? V * e : V * (x.supWebOffset || 0), overall: CHK.overall(checks) };
-  }
-
-  // EN 1993-1-8 Table 6.11 components 11 (bolt in shear) and 12 (bearing), per bolt; returns stiffness K (N/mm)
-  function stiffBolt(d, gr, t1, fu1, t2, fu2, E, eb, pb) {
-    const dM16 = 16, fub = MEM.boltFu(gr);
-    const k11 = 16 * d * d * fub / (E * dM16);
-    const kb = Math.min(0.25 * eb / d + 0.5, 0.25 * pb / d + 0.375, 1.25);
-    const kt1 = Math.min(1.5 * t1 / dM16, 2.5), kt2 = Math.min(1.5 * t2 / dM16, 2.5);
-    const k12a = 24 * kb * kt1 * d * fu1 / E, k12b = 24 * kb * kt2 * d * fu2 / E;
-    const K = E / (1 / k11 + 1 / k12a + 1 / k12b);
-    return { k11, kb, k12a, k12b, K };
   }
 
   // additional vertical holes in the C web: validation and maximum number
@@ -279,7 +232,7 @@ export const CONN: any = (() => {
     if (n <= 0) return out;
     const d = +c.dAdj, slot = c.sAdj === 'slot', lv = slot ? Math.max(d, +c.lAdj) : d, tol = +c.tolAdj || 0;
     out.dv = lv;
-    const t = p.t, flat0 = t + p.r, flat1 = p.H - t - p.r, pmin = (thin ? 3 : 2.2) * d, emin = (thin ? 1.5 : 1.2) * d;
+    const t = p.t, flat0 = t + p.r, flat1 = p.H - t - p.r, pmin = 2.5 * d, emin = 1.5 * d;
     const y = +c.eAdj, z1 = +c.zAdj, pv = +c.pAdj;
     if (y - d / 2 < emin - d / 2 + 0 && y < emin) out.msgs.push(`Hole line ${y} mm from the C end < ${U.fmt(emin, 1)} mm`);
     if (pv < Math.max(pmin, lv + d) - 1e-6) out.msgs.push(`Pitch ${pv} mm < minimum ${U.fmt(Math.max(pmin, lv + d), 1)} mm (spacing and slot length)`);
@@ -298,6 +251,6 @@ export const CONN: any = (() => {
     out.msgs = Array.from(new Set(out.msgs));
     return out;
   }
-  return { design, TYPES, stiffBolt, adjHoles, d0auto };
+  return { design, TYPES, adjHoles, d0auto };
 })();
 

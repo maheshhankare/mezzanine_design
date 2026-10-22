@@ -10,6 +10,8 @@ Two states of the same RSTAB model were supplied. **The later one (Detail 2, `be
 | CO2 | … + 1.0 LC7, second order | … + 1.0 LC7, second order |
 | Geometry, sections, hinges, supports, area loads | identical in both (nodes, members, supports, load text compared programmatically; hinge and support tables compared on the page images) | |
 
+**Detail 3** (`Mezzanine RSTAB Report - Detail 3.pdf`, `benchmarks/rstab-3x5-v3`) was supplied with the same `.rs8`. Its analysis data (nodes, members, loads, combinations, settings, results) were compared programmatically with Detail 2 and are **identical**; it adds the **STEEL IS design results** (IS 800:2007) of the box columns, which `scripts/rstab/parse-is-design.ts` extracts into `rstab-is-design.json` (cross-section 1, 396 members, equations 101-351). The Detail 2 analysis reference therefore also stands for Detail 3. The `.rs8` that accompanied Detail 3 is the same file (same settings).
+
 Model: two-level mezzanine, 30 m × 40 m (10 × 8 bays), storey height 4.5 m, 99 fixed columns, 1,567 nodes, 2,924 members (2,144 beams, 712 N-only braces, 68 "Null" dummy members that carry no stiffness and are ignored). The RSTAB printouts are the data source; the `.rs8` (OLE compound file) was used to read calculation settings.
 
 Reproduce (all from the repository root):
@@ -63,7 +65,7 @@ Sources: the two `.rs8` files (OLE compound files; the stream `RSTAB_Data 6.002`
 | Report | "Second order analysis (P-Delta)", "consider favorable effects due to tension", "refer internal forces to deformed system for shear forces V_y and V_z" |
 | Application setting | Theory II (linear strains, geometric stiffness N·G on the deformed geometry: global P-Δ and member P-δ through one term); shears referred to the deformed system, V′ = V − N·slope |
 | Comparison | Theory II reproduces both models within section 4. Von Kármán gives **63 % more sway** and an out-of-plane drift of 12.6 mm of the edge-beam end nodes (section 5.1, explained and tested) |
-| Conclusion | Second order is confirmed; Theory II is the formulation consistent with RSTAB's P-Delta and with the second-order elastic analysis of the design codes (IS 800 B-2.1, EN 1993-1-1 5.2) |
+| Conclusion | Second order is confirmed; Theory II is the formulation consistent with RSTAB's P-Delta and with the second-order elastic analysis of the design codes (IS 800 B-2.1) |
 | Uncertainty | The file cannot confirm the kinematic theory; it is inferred from the results (and from the von Kármán test in section 5.1). The remaining 1.7 % sway difference (section 5.2) may be an undocumented detail of RSTAB's Theory II |
 
 ### Item 3: LC6 / LC7 direction: **Partially verified**
@@ -130,7 +132,7 @@ Detail 1 (shear off) is reproduced as before: CO1 first order ≤ 0.51 %; CO2 se
 ## 5. Remaining differences: investigation and engineering significance
 
 ### 5.1 Edge-beam drift of 12 mm (von Kármán formulation): explained
-With the von Kármán formulation the end nodes of the top-level secondary beams at the two long edges (y = 0 and y = 40 m, e.g. nodes 1597, 895, 1527) moved **inward by 12.5 mm** while RSTAB reports 0.0 (`THEORY=vonKarman DRIFT=12 … compare.ts`). Cause: the secondary C-sections sag by about 100 mm over 5 m (L/50) under the factored load; a bent member's chord shortens by ½∫w′²dx (about 5 mm per span for this sag), and the von Kármán strain measure includes exactly this axial shortening, which Theory II (linear strains) does not. It is kinematically correct for large deflection but is **not** what RSTAB's P-Delta or the codes' second-order elastic analysis assume (IS 800 B-2.1: geometry changes and axial-force stiffness; EN 1993-1-1 5.2: deformed geometry). Independent test (`scripts/test-frame.ts` section 8): a simply supported beam on a roller shortens by ½∫w′²dx = 17/70 (q/24EI)²L⁷ (checked to 0.007 %) in von Kármán and not at all in Theory II; doubling the load quadruples the shortening; an axially restrained beam develops a membrane tension in von Kármán only. Decision: Theory II stays the default; von Kármán remains selectable and is flagged in the settings.
+With the von Kármán formulation the end nodes of the top-level secondary beams at the two long edges (y = 0 and y = 40 m, e.g. nodes 1597, 895, 1527) moved **inward by 12.5 mm** while RSTAB reports 0.0 (`THEORY=vonKarman DRIFT=12 … compare.ts`). Cause: the secondary C-sections sag by about 100 mm over 5 m (L/50) under the factored load; a bent member's chord shortens by ½∫w′²dx (about 5 mm per span for this sag), and the von Kármán strain measure includes exactly this axial shortening, which Theory II (linear strains) does not. It is kinematically correct for large deflection but is **not** what RSTAB's P-Delta or the codes' second-order elastic analysis assume (IS 800 B-2.1: geometry changes and axial-force stiffness; IS 800 Annex B-2.1: deformed geometry). Independent test (`scripts/test-frame.ts` section 8): a simply supported beam on a roller shortens by ½∫w′²dx = 17/70 (q/24EI)²L⁷ (checked to 0.007 %) in von Kármán and not at all in Theory II; doubling the load quadruples the shortening; an axially restrained beam develops a membrane tension in von Kármán only. Decision: Theory II stays the default; von Kármán remains selectable and is flagged in the settings.
 
 ### 5.2 Column moment in the lean direction (CO1 M_z 4.2 %, CO2 M_y 2.8 %, Detail 1 CO2 M_y 2.5 %)
 Per member (`SIGNIF=1`, 4/2 elements): among the 366 columns whose governing M_z is at least 100 kNcm the worst difference is **3.9 kNcm of a governing moment of 102 kNcm** (member 2222, a lightly loaded column whose moment passes through zero, hence the large percentage); among the columns that carry at least 500 kNcm (5 kNm) the worst difference is 0.47 % (CO1 M_z, member 1266: 2.5 of 529 kNcm) and 0.60 % (CO2 M_y, member 1659: 3.4 of 557 kNcm). The difference is a near-constant offset of at most 4.8 kNcm along the member (shear identical), i.e. N × 0.3 mm. Sway is 1.7 % lower than RSTAB's, uniformly. Engineering significance: the offset changes the bending utilisation of a column by at most the ratio above (about 4 % of a small moment, 0.6 % at most of a large one) times the share of bending in the interaction check, so it does not change a utilisation or stability conclusion at the 2 % level for the governing columns. **Cause unresolved.** Rejected hypotheses: element mesh (1/1 = 4/2), torsional geometric term, theory (von Kármán is worse), shear-area variants, imperfection magnitude (base shear within 0.1 %), load distribution (Y-beam shear ratio 1.002), gravity combination, stiffness factors (all 1.0). α_cr = 2.58 makes sway and moments about 1.5 times as sensitive as in a stiff frame to small stiffness differences; a difference of about 1 % in the effective or geometric stiffness explains the sway and the offset, which points to an undocumented detail of RSTAB's Theory II rather than an equilibrium error.
@@ -159,6 +161,23 @@ Fixed after the baseline was known and justified by the print resolution and by 
 
 ## 7. Status
 
-* Agreement with RSTAB (Detail 2): support forces ≤ 0.1 %, displacements ≤ 1.7 %, member forces ≤ 2 % except the column lean-direction moment (≤ 4.8 kNcm absolute) and print-level items.
-* The comparison validates the **solver and the model reproduction under the settings of section 2**; the imperfection is reproduced as equivalent loads. Geometric (explicit) imperfections are validated against closed forms and against the equivalent loads (`docs/SECOND_ORDER.md`), **not** against RSTAB (RSTAB's cases are equivalent loads). Code-based generation and member design checks are not covered (`docs/CODE_REGISTER.md`).
-* Open: the gravity combination field in the `.rs8`, a documented RSTAB Theory II formulation for the 1.7 % sway difference.
+* Agreement with RSTAB (Detail 2 and Detail 3, same analysis): support forces ≤ 0.1 %, displacements ≤ 1.7 %, member forces ≤ 2 % except the column lean-direction moment (≤ 4.8 kNcm absolute) and print-level items.
+* The comparison validates the **solver and the model reproduction under the settings of section 2**; the imperfection is reproduced as equivalent loads. Geometric (explicit) imperfections are validated against closed forms and against the equivalent loads (`docs/SECOND_ORDER.md`), **not** against RSTAB (RSTAB's cases are equivalent loads).
+* Open: the gravity combination field in the `.rs8`, a documented RSTAB Theory II formulation for the 1.7 % sway difference, and the RSTAB 9.3.2.2 result of section 8.
+
+## 8. IS 800:2007 member design against RSTAB's STEEL IS results (Detail 3)
+
+`npx tsx scripts/rstab/compare-is-design.ts` (raw output: `benchmarks/rstab-3x5-v3/results/compare-is-design.txt`) designs the 396 box columns (150 × 150 × 5, S 250) of the benchmark with the IS 800 implementation (`docs/IS800_DESIGN.md`) from the second-order forces of CO1 and CO2 (E = 210,000 N/mm² as in the RSTAB model), station by station, and compares the utilisation with RSTAB's table. Absolute difference of the utilisation:
+
+| RSTAB equation | IS 800 provision | n | mean | max |
+|---|---|---|---|---|
+| 101 tension | 6.2 | 99 | 0.0025 | 0.0049 |
+| 102 compression, section | 7.1.2 | 297 | 0.0020 | 0.0051 |
+| 121 / 123 shear z / y | 8.4.1 | 392 / 388 | 0.0026 | 0.0053 |
+| 181 / 182 bending y + shear + N | 9.3.1 | 251 / 147 | 0.0024 | 0.0058 |
+| 201 / 202 bending z + shear + N | 9.3.1 | 209 / 141 | 0.0028 | 0.0055 |
+| 221 biaxial | 9.3.1.1/2 | 390 | 0.0025 | 0.0056 |
+| **341 overall member, y** | **9.3.2.2, Table 18** | 291 | **0.133** | **0.354** |
+| **351 overall member, z (LTB)** | **9.3.2.2, Table 18** | 291 | **0.086** | **0.367** |
+
+RSTAB prints utilisations to two decimals, so differences below 0.005 are rounding: tension, compression of the section, shear and the section interactions **agree**. The overall-member check (9.3.2.2) **does not agree and the difference is not explained**: it was investigated with both assignments of the minor and major axes, with C_m = 0.9 (sway) and from the end moments (row A of Table 18), and with the classification variants; none reproduces RSTAB's 341 / 351 values. The implementation follows the formulas as read on the page image (verified in the register); the difference between RSTAB's interpretation (class assignment rule, the treatment of K_y / K_z and λ_LT for hollow sections) and this reading is **unresolved**. Agreement with RSTAB would not prove IS 800 compliance and disagreement does not prove that either is wrong: the member design is reported for the checks that agree and the 9.3.2.2 result is labelled with this open item in the calculation record.

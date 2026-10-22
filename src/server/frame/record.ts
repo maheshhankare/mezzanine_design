@@ -1,11 +1,14 @@
-import type { FrameModel, SolveResult } from './types';
+import type { SolveResult } from './types';
 import { sectionForcesAt } from './solve';
-import { CODE_REGISTER, verificationWarnings, type CodeItem } from '../../shared/codeRegister';
-import { validateSettings, type AnalysisSettings, type ValidationResult } from '../../shared/analysisSettings';
+import { CODE_REGISTER, IS800_EDITION, verificationWarnings } from '../../shared/codeRegister';
+import { DESIGN_STANDARD, DESIGN_STANDARD_TITLE, validateSettings, type AnalysisSettings, type ValidationResult } from '../../shared/analysisSettings';
+import type { FrameProjectData } from '../../shared/frameProject';
+import type { MemberDesignResult } from './design/member';
 
 /**
- * Calculation record (report data) of a frame analysis: everything that makes the run traceable, with verified, provisional and pending content kept
- * apart. A converged solver run is NOT presented as a code-compliance verdict.
+ * Calculation record (the data of the report): everything that makes one analysis and design run traceable, with analysis results, verified checks,
+ * provisional checks and pending items kept apart. A converged solver run is NOT presented as a code-compliance verdict. A record belongs to one model
+ * revision and one run; when the model changes, earlier records stay and are identified as belonging to an earlier revision.
  */
 
 /** IS 800 B-2.2(a): the design bending moment is the maximum bending moment in the length of the member, taken directly from the second-order analysis. */
@@ -29,83 +32,103 @@ export interface AppliedImperfection {
   kind: 'sway' | 'bow' | 'notional';
   source: 'code' | 'user';
   clause?: string;
-  /** how it enters the analysis */
   representation: 'geometry' | 'equivalent loads';
-  magnitude: string; // e.g. "φ = 1/200"
+  magnitude: string;
   direction: string;
-  members: string; // description / list
+  members: string;
+  combination?: string;
   note?: string;
 }
 
+export interface RunIdentity { projectId: string; projectName: string; modelRevision: number; runId: string; createdAt: string; modelFingerprint: string; engineVersion: string }
+
+export interface CombinationSummary {
+  id: string; name: string; status: string; converged: boolean; iterations: number; steps: number; message: string;
+  maxDisplacement: { node: number; value: number; direction: string } | null;
+  reactionSum: [number, number, number];
+  imperfection?: string;
+}
+
+export interface DesignSummary {
+  enabled: boolean;
+  membersDesigned: number;
+  membersPending: number;
+  maxRatio: number | null;
+  failing: number;
+  /** compact per-member result: governing check, ratio, status, label */
+  members: { member: number; combination: string; status: string; label: string; governing: string | null; ratio: number | null; clause: string | null; x: number | null }[];
+  pendingReasons: { reason: string; count: number }[];
+}
+
 export interface RecordInput {
-  project: { name: string; engineer?: string; date?: string };
-  settings: AnalysisSettings;
-  model: FrameModel;
-  loadCases: { id: string; description: string }[];
-  combinations: { id: string; description: string; factors: { lc: string; factor: number }[] }[];
+  identity: RunIdentity;
+  project: FrameProjectData;
+  settingsUsed: AnalysisSettings;
+  combinations: CombinationSummary[];
   imperfections: AppliedImperfection[];
-  result?: SolveResult;
-  /** quantities from the analysis worth reporting (name, value, unit) */
   keyResults?: { name: string; value: number | string; unit: string }[];
+  design?: DesignSummary;
   convergenceEvidence?: string[];
   benchmark?: string[];
-  utilisations?: { member: string; check: string; ratio: number; clause: string; verified: boolean }[];
   extraWarnings?: string[];
+  modelWarnings?: string[];
 }
 
 export interface RecordSection { n: number; title: string; lines: string[] }
 export interface CalculationRecord {
-  label: ValidationResult['label'];
+  identity: RunIdentity;
+  standard: typeof DESIGN_STANDARD;
+  label: 'blocked' | 'analysis-only' | 'provisional' | 'user-defined';
   sections: RecordSection[];
   validation: ValidationResult;
+  settingsUsed: AnalysisSettings;
+  design?: DesignSummary;
   markdown: string;
 }
 
 export const RECORD_TITLES = [
-  'Project information and design standard', 'Standard edition and National Annex', 'Model and analysis assumptions', 'Solver formulation and analysis order',
+  'Project, model revision and run identification', 'Design standard and edition', 'Model and analysis assumptions', 'Solver formulation and analysis order',
   'Load cases and combinations', 'Material and section properties', 'Supports, member releases and stiffness factors', 'Imperfections',
-  'First-order and second-order results', 'Member design checks and utilisation', 'Stability-related calculations and code references', 'RSTAB benchmark comparison',
-  'Numerical convergence and mesh-refinement evidence', 'Verification status of the code provisions', 'Warnings, limitations and outstanding decisions',
+  'Displacements, support reactions and member forces', 'IS 800 member design checks and utilisation', 'Stability and buckling checks, code references', 'RSTAB benchmark validation status',
+  'Numerical convergence and mesh-refinement evidence', 'Verification status of the IS 800 provisions', 'Warnings, limitations and unresolved items',
 ] as const;
 
-const std = (s: AnalysisSettings) => (s.standard === 'IS800' ? 'IS 800:2007' : s.standard === 'EN1993' ? 'EN 1993-1-1' : 'none (user-defined)');
-const row = (i: CodeItem) => `- ${i.id} | ${i.clause} | ${i.status.toUpperCase()}${i.textVerified ? '' : ' (text not verified)'} | implementation: ${i.implementation || 'none'} | test: ${i.validation || 'none'}${i.outstanding ? ' | outstanding: ' + i.outstanding : ''}`;
-
 export function buildCalculationRecord(inp: RecordInput): CalculationRecord {
-  const s = inp.settings, v = validateSettings(s), r = inp.result;
-  const items = CODE_REGISTER.filter((i) => (s.standard === 'IS800' ? i.standard === 'IS 800' : s.standard === 'EN1993' ? i.standard === 'EN 1993-1-1' : false));
+  const s = inp.settingsUsed, p = inp.project, v = validateSettings(s), id = inp.identity;
   const sec: RecordSection[] = RECORD_TITLES.map((title, k) => ({ n: k + 1, title, lines: [] }));
   const put = (n: number, ...l: string[]) => sec[n - 1].lines.push(...l);
 
-  put(1, `Project: ${inp.project.name}`, `Engineer: ${inp.project.engineer ?? 'not given'}`, `Date: ${inp.project.date ?? 'not given'}`, `Design standard selected: ${std(s)}`);
-  put(2, items[0] ? `Edition: ${items[0].edition}` : 'No design standard selected.',
-    s.standard === 'EN1993' ? (s.nationalAnnex ? `National Annex: ${s.nationalAnnex.country} (${s.nationalAnnex.documentTitle || 'title not given'}); NDPs not set/verified: ${s.nationalAnnex.ndps.filter((n) => n.value === null || n.status !== 'verified').map((n) => n.id).join(', ') || 'none'}` : 'National Annex: NONE selected (none is assumed).') : 'National Annex: not applicable',
-    ...(s.standard === 'EN1993' && s.acceptEurocodeTextValues ? ['Values printed in the Eurocode text are used where the National Annex would decide: PROVISIONAL.'] : []));
-  put(3, `Nodes: ${inp.model.nodes.length}; members: ${inp.model.members.length}; supports: ${inp.model.supports.length}`, `Shear deformation: ${s.shearDeformation ? 'on (printed shear areas)' : 'off'}`, 'Linear elastic material; small strains, moderate rotations; no warping DOF (lateral-torsional buckling is not captured by the frame analysis).');
-  put(4, `Analysis order: ${s.order === 'second' ? 'second order' : 'first order'}`, `Second-order theory: ${s.order === 'second' ? (s.theory === 'II' ? 'Theory II (linear strains, geometric stiffness on the deformed geometry): P-Δ and P-δ through the same geometric term N·G' : 'von Kármán (adds membrane coupling)') : 'not applicable'}`,
+  put(1, `Project: ${id.projectName} (${id.projectId})`, `Model revision: ${id.modelRevision}`, `Analysis run: ${id.runId}`, `Calculated: ${id.createdAt}`, `Model fingerprint: ${id.modelFingerprint}`, `Engine: ${id.engineVersion}`);
+  put(2, `Design standard: ${DESIGN_STANDARD_TITLE}`, `Edition used for the checks: ${IS800_EDITION}`, 'IS 800:2007 is the only design standard of this application.');
+  put(3, `Nodes: ${p.frame.nodes.length}; members: ${p.frame.members.length}; supports: ${p.frame.supports.length}`, `Shear deformation: ${s.shearDeformation ? 'on (printed shear areas)' : 'off'}`, 'Linear elastic material; small strains, moderate rotations; no warping DOF.');
+  put(4, `Analysis order: ${s.order === 'second' ? 'second order (IS 800 Annex B-2)' : 'first order'}`, s.order === 'second' ? `Second-order theory: ${s.theory === 'II' ? 'Theory II: linear strains, geometric stiffness on the deformed geometry, global P-Δ and member P-δ through one term' : 'von Kármán (adds membrane coupling; not the code second-order analysis)'}` : 'First order: member design is not run on first-order results (IS 800 4.4.2).',
     `Iteration limit ${s.maxIterations} (reaching it is never treated as convergence); load steps ${s.loadSteps}`);
-  put(5, ...inp.loadCases.map((l) => `${l.id}: ${l.description}`), ...inp.combinations.map((c) => `${c.id}: ${c.description} = ${c.factors.map((f) => `${f.factor} × ${f.lc}`).join(' + ')}`));
-  put(6, ...Object.entries(inp.model.materials).map(([k, m]) => `Material ${k}: E = ${m.E} N/mm², G = ${m.G} N/mm²`), ...Object.entries(inp.model.sections).map(([k, x]) => `Section ${k}: A = ${x.A} mm², Iy = ${x.Iy} mm⁴, Iz = ${x.Iz} mm⁴, J = ${x.J} mm⁴${x.Ay ? `, Ay = ${x.Ay}, Az = ${x.Az} mm²` : ''}`));
-  const rel = inp.model.members.filter((m) => m.rel1 || m.rel2).length;
-  put(7, `Supports: ${inp.model.supports.length}; members with end releases: ${rel}`, `Global stiffness factors: EA ${s.stiffnessFactors.EA}, EI ${s.stiffnessFactors.EI}, GJ ${s.stiffnessFactors.GJ}`, `Member-level factors: ${inp.model.members.filter((m) => (m.fEA ?? 1) !== 1 || (m.fEI ?? 1) !== 1 || (m.fGJ ?? 1) !== 1).length} members with a factor other than 1`);
-  if (inp.imperfections.length) for (const i of inp.imperfections) put(8, `${i.kind.toUpperCase()} | source: ${i.source === 'code' ? 'CODE' + (i.clause ? ' ' + i.clause : '') : 'USER-DEFINED (not a code value)'} | ${i.representation} | ${i.magnitude} | direction ${i.direction} | members: ${i.members}${i.note ? ' | ' + i.note : ''}`);
+  put(5, ...p.loadCases.map((l) => `${l.id}: ${l.name ?? ''} (${(l.member?.length ?? 0)} member loads, ${(l.nodal?.length ?? 0)} nodal loads${l.selfWeight ? ', self-weight ' + l.selfWeight.join(',') : ''})`), ...p.combinations.map((c) => `${c.id} ${c.name}: ${c.factors.map((f) => `${f.factor} × ${f.lc}`).join(' + ')}${c.sway ? ` + sway imperfection ${c.sway}` : ''}`));
+  put(6, ...Object.entries(p.frame.materials).map(([k, m]) => `Material ${k}: E = ${m.E} N/mm², G = ${m.G} N/mm²${m.E !== 200000 ? ' (IS 800 2.2.4.1: E = 200000 N/mm²; the value of the project model is used, as entered)' : ''}`), ...Object.entries(p.frame.sections).map(([k, x]) => `Section ${k}: A = ${x.A} mm², Iy = ${x.Iy} mm⁴, Iz = ${x.Iz} mm⁴, J = ${x.J} mm⁴${x.Ay ? `, Ay = ${x.Ay}, Az = ${x.Az} mm²` : ''}${p.design.sections[k] ? ` | design: ${p.design.sections[k].kind}` : ''}`),
+    ...Object.entries(p.design.materials).map(([k, m]) => `Design material ${k}: f_y = ${m.fy}, f_u = ${m.fu}, E = ${m.E} N/mm²`));
+  const rel = p.frame.members.filter((m) => m.rel1 || m.rel2).length;
+  put(7, `Supports: ${p.frame.supports.length}; members with end releases: ${rel}`, `Global stiffness factors: EA ${s.stiffnessFactors.EA}, EI ${s.stiffnessFactors.EI}, GJ ${s.stiffnessFactors.GJ}`, `Members with their own factor: ${p.frame.members.filter((m) => (m.fEA ?? 1) !== 1 || (m.fEI ?? 1) !== 1 || (m.fGJ ?? 1) !== 1).length}`);
+  if (inp.imperfections.length) for (const i of inp.imperfections) put(8, `${i.kind.toUpperCase()}${i.combination ? ' in ' + i.combination : ''} | source: ${i.source === 'code' ? 'IS 800' + (i.clause ? ' ' + i.clause : '') : 'USER-DEFINED (not a code value)'} | ${i.representation} | ${i.magnitude} | direction ${i.direction} | members: ${i.members}${i.note ? ' | ' + i.note : ''}`);
   else put(8, 'No imperfection is applied.');
-  if (r) {
-    put(9, `Status: ${r.status}${r.converged ? '' : ' (NOT converged: ' + r.message + ')'}`, `Iterations: ${r.totalIterations} in ${r.steps.length} load step(s)`, ...(inp.keyResults ?? []).map((k) => `${k.name}: ${typeof k.value === 'number' ? k.value.toPrecision(5) : k.value} ${k.unit}`));
-  } else put(9, 'No analysis result attached.');
-  if (inp.utilisations?.length) for (const u of inp.utilisations) put(10, `${u.member} | ${u.check} | ${u.ratio.toFixed(3)} | ${u.clause} | ${u.verified ? 'verified route' : 'PROVISIONAL'}`);
-  else put(10, 'No member design check was performed: the member design clauses of the standard are not implemented (register: IS800-members / EN-6).');
-  put(11, ...(items.filter((i) => i.scope === 'stability' || i.scope === 'global-analysis').map((i) => `${i.id} (${i.clause}): ${i.status}`)));
-  put(12, ...(inp.benchmark?.length ? inp.benchmark : ['No benchmark comparison attached to this record. The RSTAB comparison of the solver is in docs/RSTAB_BENCHMARK.md.']));
-  put(13, ...(inp.convergenceEvidence?.length ? inp.convergenceEvidence : ['No mesh-refinement evidence attached. See docs/SECOND_ORDER.md section 7.']));
-  put(14, ...(items.length ? items.map(row) : ['No design standard selected: no code provision is claimed.']));
-  const warn = [...v.errors.map((e) => `ERROR ${e.field}: ${e.message}`), ...v.warnings.map((w) => `warning ${w.field}: ${w.message}`),
-    ...(s.standard === 'IS800' ? verificationWarnings({ route: 'IS', features: v.usedFeatures }) : s.standard === 'EN1993' ? verificationWarnings({ route: 'EN', annex: s.nationalAnnex, features: v.usedFeatures }) : []),
-    ...(inp.extraWarnings ?? [])];
-  put(15, 'A converged analysis is not proof of design-code compliance.', ...warn);
-  const label = r && !r.converged ? 'blocked' : v.label;
+  for (const c of inp.combinations) put(9, `${c.id}: status ${c.status}${c.converged ? '' : ' (NOT converged: ' + c.message + ')'}; ${c.iterations} iterations; reaction sum Fx ${(c.reactionSum[0] / 1e3).toFixed(2)}, Fy ${(c.reactionSum[1] / 1e3).toFixed(2)}, Fz ${(c.reactionSum[2] / 1e3).toFixed(2)} kN; max displacement ${c.maxDisplacement ? `${c.maxDisplacement.value.toFixed(2)} mm (node ${c.maxDisplacement.node}, ${c.maxDisplacement.direction})` : 'n/a'}${c.imperfection ? '; ' + c.imperfection : ''}`);
+  for (const k of inp.keyResults ?? []) put(9, `${k.name}: ${typeof k.value === 'number' ? k.value.toPrecision(5) : k.value} ${k.unit}`);
+  const d = inp.design;
+  if (d?.enabled) {
+    put(10, `Members designed: ${d.membersDesigned}; pending: ${d.membersPending}; failing (utilisation > 1): ${d.failing}; maximum utilisation ${d.maxRatio === null ? 'n/a' : d.maxRatio.toFixed(3)}`);
+    const top = d.members.filter((m) => m.ratio !== null).sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0)).slice(0, 15);
+    for (const m of top) put(10, `member ${m.member} ${m.combination}: ${m.governing} ${m.ratio!.toFixed(3)} (${m.clause}${m.x !== null ? ', x = ' + m.x.toFixed(0) + ' mm' : ''}) [${m.status.toUpperCase()}, ${m.label}]`);
+    for (const r of d.pendingReasons) put(10, `PENDING (${r.count} member results): ${r.reason}`);
+  } else put(10, s.design.enabled ? 'The member design was requested but not run (see the warnings).' : 'The member design was not requested: this record contains structural analysis results only; no IS 800 design check was performed.');
+  put(11, ...CODE_REGISTER.filter((i) => i.scope === 'stability' || i.scope === 'global-analysis' || i.scope === 'classification' || i.scope === 'resistance').filter((i) => i.status !== 'pending').map((i) => `${i.id} (${i.clause}): ${i.status}`));
+  put(12, ...(inp.benchmark?.length ? inp.benchmark : ['Benchmark status: the solver is compared with the RSTAB reference model in docs/RSTAB_BENCHMARK.md (CO1 / CO2); no comparison is attached to this project run.']));
+  put(13, ...(inp.convergenceEvidence?.length ? inp.convergenceEvidence : ['See docs/SECOND_ORDER.md section 7 for mesh refinement and sensitivity evidence of the benchmark model.']));
+  put(14, ...CODE_REGISTER.map((i) => `${i.id} | ${i.clause} | ${i.status.toUpperCase()}${i.textVerified ? '' : ' (text not verified)'}${i.outstanding ? ' | outstanding: ' + i.outstanding : ''}`));
+  const warn = [...v.errors.map((e) => `ERROR ${e.field}: ${e.message}`), ...v.warnings.map((w) => `warning ${w.field}: ${w.message}`), ...verificationWarnings({ features: v.usedFeatures }), ...(inp.modelWarnings ?? []), ...(inp.extraWarnings ?? [])];
+  put(15, 'A converged analysis is not proof of design-code compliance. Agreement with RSTAB internal forces is not proof of IS 800 compliance.', ...warn);
 
-  const md = [`# Calculation record: ${inp.project.name}`, '', `**Result labelling: ${label.toUpperCase()}**`, '',
+  const anyBad = inp.combinations.some((c) => !c.converged);
+  const label: CalculationRecord['label'] = anyBad || !v.ok ? 'blocked' : !d?.enabled ? 'analysis-only' : v.label === 'user-defined' ? 'user-defined' : 'provisional';
+  const md = [`# Calculation record: ${id.projectName}`, '', `**Standard: ${DESIGN_STANDARD}. Result labelling: ${label.toUpperCase()}**`, '', `Model revision ${id.modelRevision} · run ${id.runId} · ${id.createdAt}`, '',
     ...sec.flatMap((x) => [`## ${x.n}. ${x.title}`, ...(x.lines.length ? x.lines.map((l) => `- ${l}`) : ['- (nothing to report)']), ''])].join('\n');
-  return { label, sections: sec, validation: v, markdown: md };
+  return { identity: id, standard: DESIGN_STANDARD, label, sections: sec, validation: v, settingsUsed: s, design: d, markdown: md };
 }

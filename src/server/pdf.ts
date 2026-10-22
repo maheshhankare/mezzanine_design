@@ -22,7 +22,7 @@ const COL = { ink: rgb(0.11, 0.14, 0.19), mute: rgb(0.36, 0.4, 0.46), line: rgb(
 const F = (x: number, d = 2): string => (Number.isFinite(x) ? U.fmt(x, d) : x === Infinity ? '∞' : '–');
 const clean = (s: unknown): string => String(s ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 // The engine's clause strings sometimes carry the governing expression after the reference. The report shows the code reference only.
-const REF = /\b(?:EN 19\d\d-\d(?:-\d)?|IS \d{3}(?::\d{4})?|AISC 360-16|AISI S100-16|ASCE 7(?:-\d+)?|SCI P\d+|CIDECT DG ?\d+|EN 10\d{3}(?:-\d)?)(?:\s+(?:Table|Tables|eq\.|Clause|cl\.))?(?:\s*[A-Z]?\d+(?:\.\d+)*(?:\(\d+\))?)?/g;
+const REF = /\b(?:IS \d{3}(?::\d{4})?)(?:\s+(?:Table|Tables|eq\.|Clause|cl\.))?(?:\s*[A-Z]?\d+(?:\.\d+)*(?:\(\d+\))?)?/g;
 export const clauseRef = (c: unknown): string => {
   const s = clean(c);
   const m = (s.match(REF) || []).map((x) => x.trim());
@@ -222,7 +222,7 @@ export async function buildReport(inp: ReportInput): Promise<Uint8Array> {
   // ----- title block -----
   d.page.drawRectangle({ x: M.l, y: d.y - 78, width: d.width, height: 90, color: COL.band });
   d.text(clean(p.name), M.l + 12, d.y - 14, { size: 17, bold: true, color: COL.head });
-  d.text(`Cold-formed C-section mezzanine · ${I.code === 'EN' ? 'EN 1990 / EN 1993' : I.code === 'AISI' ? 'AISI S100 / AISC 360' : 'IS 875 / IS 800'}`, M.l + 12, d.y - 32, { size: 9.5, color: COL.mute });
+  d.text(`Cold-formed C-section mezzanine · IS 875 / IS 800:2007`, M.l + 12, d.y - 32, { size: 9.5, color: COL.mute });
   d.text(`Reference: ${clean(p.reference) || '–'}`, M.l + 12, d.y - 50, { size: 9 });
   d.text(`Revision ${p.revision} · ${inp.generatedAt.toISOString().slice(0, 10)}`, M.l + 12, d.y - 64, { size: 9 });
   d.text(S.overall.status === 'PASS' ? 'ALL CHECKS PASS' : S.overall.status === 'REVIEW' ? 'REVIEW REQUIRED' : 'DESIGN FAILS', M.l, d.y - 34, { size: 14, bold: true, color: stColor(S.overall.status), align: 'r', w: d.width - 12 });
@@ -277,7 +277,7 @@ export async function buildReport(inp: ReportInput): Promise<Uint8Array> {
   d.kv([
     ['Design route', clean(R.name)], ['ULS combination', clean(R.ulsText)], ['SLS combination', clean(R.slsText)],
     ['Elastic / shear modulus', `${F(R.E, 0)} / ${F(R.E / (2 * (1 + +I.nu)), 0)} N/mm²`],
-    ['Partial factors', R.code === 'EN' ? `γM0 ${R.gM0}, γM1 ${R.gM1}, γM2 ${R.gM2}` : R.code === 'AISI' ? 'φ factors per AISI S100-16 / AISC 360-16' : 'γm0 1.10, γm1 1.25, γmb 1.25, γmw 1.25 (IS 800 Table 5)'],
+        ['Partial factors', 'γm0 1.10, γm1 1.25, γmb 1.25, γmw 1.25 (IS 800 Table 5)'],
   ]);
   d.h2('Load path (characteristic and design values)');
   d.kv([
@@ -293,11 +293,11 @@ export async function buildReport(inp: ReportInput): Promise<Uint8Array> {
   for (const [k, label] of [['mb', 'Main beam'], ['sbi', 'SB-Int'], ['sbe', 'SB-End']] as const) {
     const m = k === 'mb' ? res.mods.mb.gov : res.mods[k];
     if (!m || m.error) continue;
-    const g = m.gross, e = m.eff || {};
-    secRows.push([{ t: label, bold: true }, clean(m.spec.title), F(g.A, 0), F(g.mass, 2), F(g.Iyy / 1e4, 1), F(g.Izz / 1e4, 1), F(e.McRdP / 1e6, 2), F(e.VbRd / 1e3, 1)]);
+    const g = m.gross;
+    secRows.push([{ t: label, bold: true }, clean(m.spec.title), F(g.A, 0), F(g.mass, 2), F(g.Iyy / 1e4, 1), F(g.Izz / 1e4, 1), 'pending', 'pending']);
   }
   if (secRows.length)
-    d.table([{ w: 1.2, head: 'Member' }, { w: 3.2, head: 'Section' }, { w: 1, head: 'A [mm²]', align: 'r' }, { w: 1, head: 'kg/m', align: 'r' }, { w: 1.1, head: 'I_y [cm⁴]', align: 'r' }, { w: 1.1, head: 'I_z [cm⁴]', align: 'r' }, { w: 1.2, head: 'M_c,Rd [kNm]', align: 'r' }, { w: 1.1, head: 'V_b,Rd [kN]', align: 'r' }], secRows, 7.6);
+    d.table([{ w: 1.2, head: 'Member' }, { w: 3.2, head: 'Section' }, { w: 1, head: 'A [mm²]', align: 'r' }, { w: 1, head: 'kg/m', align: 'r' }, { w: 1.1, head: 'I_y [cm⁴]', align: 'r' }, { w: 1.1, head: 'I_z [cm⁴]', align: 'r' }, { w: 1.2, head: 'M_Rd [kNm]', align: 'r' }, { w: 1.1, head: 'V_Rd [kN]', align: 'r' }], secRows, 7.6);
   const col = res.mods.col;
   if (col && col.props) d.para(`Box column: A = ${F(col.props.A, 0)} mm², I_y = ${F(col.props.Iy / 1e4, 1)} cm⁴, I_z = ${F(col.props.Iz / 1e4, 1)} cm⁴. Design forces (ULS): N = ${F(col.loads.N / 1e3, 2)} kN, M_y = ${F(col.loads.My / 1e6, 3)} kNm, M_z = ${F(col.loads.Mz / 1e6, 3)} kNm, V = ${F(col.loads.V / 1e3, 2)} kN.`);
 

@@ -8,7 +8,9 @@ type Raw = Record<string, unknown>;
 export function sanitiseInputs(raw: unknown): Record<string, string | number> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'inputs must be an object');
   const out: Record<string, string | number> = Object.assign(SCHEMA.defaults(), {});
-  for (const [k, v] of Object.entries(raw as Raw)) {
+  // inputs stored by an earlier version: removed fields dropped, a removed design route replaced by IS 800 with the 'reviewed' flag cleared (never silent)
+  const migrated = SCHEMA.migrate(raw as Raw).inputs as Raw;
+  for (const [k, v] of Object.entries(migrated)) {
     if (!Object.prototype.hasOwnProperty.call(SCHEMA.byId, k)) throw new HttpError(400, `Unknown input "${k.slice(0, 40)}"`);
     if (v === null || v === undefined) { out[k] = ''; continue; }
     if (typeof v === 'boolean') { out[k] = v ? 'yes' : 'no'; continue; }

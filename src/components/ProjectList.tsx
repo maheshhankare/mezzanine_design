@@ -27,6 +27,7 @@ export default function ProjectList({ user, initial }: { user: { name: string; e
       <header className="dash-head">
         <h1>Projects</h1>
         <div className="tools">
+          <Link className="btn" href="/frame">Frame analysis (IS 800)</Link>
           {user.role === 'admin' && <Link className="btn" href="/admin">Manage users</Link>}
           <span className="puser">{user.name}</span>
           <button type="button" onClick={signOut}>Sign out</button>

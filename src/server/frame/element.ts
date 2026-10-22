@@ -142,7 +142,7 @@ export function beamEval(p: BeamProps, Kb: Float64Array, G: Float64Array, u: Flo
     }
   }
   // vonKarman: the axial strain includes the quadratic transverse term (membrane coupling, 'bow-string shortening').
-  // Theory II (default, EN 1993-1-1 5.2.2 / RSTAB P-Delta): linear strain, equilibrium on the deformed geometry through the geometric term only.
+  // Theory II (default; the second-order elastic analysis of IS 800 Annex B, RSTAB P-Delta): linear strain, equilibrium on the deformed geometry through the geometric term only.
   const eps = vonKarman ? delta / L + (quad - quad0) / (2 * L) : delta / L;
   const N = EA * eps;
   // v = a + G ut

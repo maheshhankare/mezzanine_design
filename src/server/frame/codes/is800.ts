@@ -2,7 +2,7 @@ import type { LoadCase, NodalLoad } from '../types';
 
 /**
  * IS 800:2007 analysis provisions that were read in the official text and checked on the page images (register: src/shared/codeRegister.ts,
- * ids IS800-*). Independent of the EN 1993 route: nothing here uses a Eurocode equation or factor. Member design (Sections 7-9) is NOT here.
+ * ids IS800-*). Member design (Sections 7-9) is NOT here.
  */
 
 /** one floor / roof level of the structure with the vertical loads that act there */

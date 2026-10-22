@@ -15,6 +15,11 @@
     "test:frame": "tsx scripts/test-frame.ts",
     "test:rstab": "tsx scripts/rstab/regress.ts",
     "test:codes": "tsx scripts/test-codes.ts",
+    "test:design": "tsx scripts/test-design.ts",
+    "test:integration": "tsx scripts/test-integration.ts",
+    "test:no-en": "tsx scripts/test-no-en.ts",
+    "test:restraint": "tsx --conditions=react-server scripts/test-restraint.ts",
+    "test:legacy": "tsx --conditions=react-server scripts/test-legacy.ts",
     "test:pdf": "tsx --conditions=react-server scripts/test-pdf.ts",
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts"
   },

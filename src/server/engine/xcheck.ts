@@ -1,4 +1,4 @@
-// @ts-nocheck — ported verbatim from the mockup (index.html, 88_xcheck.js); logic unchanged so results match the mockup.
+// @ts-nocheck — ported from the mockup (index.html, 88_xcheck.js). The reference cases are IS 800:2007 cases; the reference set was recorded again for the IS-only engine (scripts/record-xbref.ts).
 import "server-only";
 import { XB_REF } from './xbref';
 import { DWG } from './dxf';
@@ -8,7 +8,7 @@ import { SCHEMA } from '@/shared/schema';
 // No DOM here: the same code runs in every browser and in the Node tests, so a browser is compared against exactly the values the tests check.
 export const XCHK: any = (() => {
   // the calculation-engine version changes only when a formula, method or default that can change a result changes (the app version also changes for UI work)
-  const ENGINE_VERSION = '1.3.0';
+  const ENGINE_VERSION = '2.0.0 (IS 800:2007 only)';
   // project-file format: 1 = v1.0–v1.2 export {app, version, inputs, cases}; 2 = adds format, engine, fingerprint and a result summary for comparison
   const FORMAT = 'csbd-project', FORMAT_VERSION = 2;
   // tolerance for comparing the same calculation on two JavaScript engines (see METHODS.md, "Reproducibility"). Statuses must match exactly.
@@ -111,12 +111,12 @@ export const XCHK: any = (() => {
   // ---------------- reference cases (the same inputs in every browser and in the Node tests) ----------------
   const REV = { sbi_arr: 'b2b', sbe_arr: 'b2b', sbi_t: 1.5, sbe_t: 2, mb_t: 2.5, ci_nv: 3, ci_p1: 80, ce_nv: 3, ce_p1: 80, k_nL: '2', k_nb: 2, k_tg: 8 };
   const CASES = [
-    { id: 'X1', name: 'Example 3 mapped to C, as entered (defaults; FAIL expected)', inputs: {} },
-    { id: 'X2', name: 'Example 3 revised study (all checks PASS)', inputs: REV },
+    { id: 'X1', name: 'Example 3 mapped to C, as entered (defaults)', inputs: {} },
+    { id: 'X2', name: 'Example 3 revised study', inputs: REV },
     { id: 'X3', name: 'Optimisation demo: main beam C200×50×10×2', inputs: { mb_H: 200, mb_Bt: 50, mb_Bb: 50, mb_Ct: 10, mb_Cb: 10, mb_t: 2, sbi_arr: 'b2b', sbe_arr: 'b2b', sbi_t: 1.5, sbe_t: 1.5, ci_nv: 3, ci_p1: 80, ce_nv: 3, ce_p1: 80 } },
-    { id: 'X4', name: 'Revised study on the AISI / AISC route', inputs: Object.assign({}, REV, { code: 'AISI', E: 203000 }) },
-    { id: 'X5', name: 'Revised study, top-flange loading, eq. 6.10a/b, fixed base, cold-formed RHS column', inputs: Object.assign({}, REV, { lc_conv: 'flange', combo: '610ab', col_base: 'fix', col_type: 'rhsC' }) },
-    { id: 'X6', name: 'Revised study on the IS route, MDF floor, variable SB-Int positions', inputs: Object.assign({}, REV, { code: 'IS', d_type: 'mdf', sbiVar: 'var', xsbi: '900, 2100' }) }
+    { id: 'X4', name: 'Revised study, top-flange loading, user effective lengths, cold-formed RHS column', inputs: Object.assign({}, REV, { lc_conv: 'flange', col_frame: 'user', col_ky: 1.0, col_kz: 1.0, col_type: 'rhsC' }) },
+    { id: 'X5', name: 'Revised study, hot-finished RHS column, MDF floor, variable SB-Int positions', inputs: Object.assign({}, REV, { col_type: 'rhsH', d_type: 'mdf', sbiVar: 'var', xsbi: '900, 2100' }) },
+    { id: 'X6', name: 'Revised study, knee-braced sway frame with user effective lengths', inputs: Object.assign({}, REV, { col_frame: 'user', col_ky: 2.0, col_kz: 2.0, col_type: 'rhsH' }) }
   ];
   // elementary maths of this JavaScript engine (Math.sin, exp, pow …): bit-equality with the reference shows whether the maths libraries agree
   const PROBE_X = [0.1, 0.7, 1.3, 2.9, 7.3, 31.7];
