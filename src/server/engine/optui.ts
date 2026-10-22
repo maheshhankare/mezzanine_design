@@ -146,7 +146,7 @@ export const OPTUI: any = (() => {
   function sectionInfo(k, res) {
     const d = k === 'mb' ? res.mods.mb.gov : res.mods[k]; if (!d || d.error) return '';
     const g = d.gross, lp = d.spec.lp || {};
-    return `<div class="rgrid"><div>${SK.section(d.spec.p, d.spec.arr, d.spec.opt, g, { lp, W: 320, H: 320 })}</div><div>${H.kvTable([['A', g.A, 'mm²', 1], ['Mass', g.mass, 'kg/m', 2], ['Centroid CG (y, z)', `${F(lp.yc, 1)}, ${F(lp.zc, 1)}`, 'mm'], ['Shear centre SC (y, z)', `${F(lp.ysc, 1)}, ${F(lp.zsc, 1)}`, 'mm'], ['CG − SC', `${F(lp.dyc, 1)}, ${F(lp.dzc, 1)}`, 'mm'], ['I_y', g.Iyy / 1e4, 'cm⁴', 1], ['I_z', g.Izz / 1e4, 'cm⁴', 2], ['I_t', g.It / 1e4, 'cm⁴', 4], ['I_w', g.Iw / 1e6, 'cm⁶', 0], ['W_eff,y (sagging)', d.eff.WeffP / 1e3, 'cm³', 2], ['M_cr credited', d.Mcr / 1e6, 'kNm', 2]], 'Current section properties (calculated)')}</div></div>`;
+    return `<div class="rgrid"><div>${SK.section(d.spec.p, d.spec.arr, d.spec.opt, g, { lp, W: 320, H: 320 })}</div><div>${H.kvTable([['A', g.A, 'mm²', 1], ['Mass', g.mass, 'kg/m', 2], ['Centroid CG (y, z)', `${F(lp.yc, 1)}, ${F(lp.zc, 1)}`, 'mm'], ['Shear centre SC (y, z)', `${F(lp.ysc, 1)}, ${F(lp.zsc, 1)}`, 'mm'], ['CG − SC', `${F(lp.dyc, 1)}, ${F(lp.dzc, 1)}`, 'mm'], ['I_y', g.Iyy / 1e4, 'cm⁴', 1], ['I_z', g.Izz / 1e4, 'cm⁴', 2], ['I_t', g.It / 1e4, 'cm⁴', 4], ['I_w', g.Iw / 1e6, 'cm⁶', 0], ['W_el,y', g.Wy / 1e3, 'cm³', 2], ['M_cr credited', d.Mcr / 1e6, 'kNm', 2]], 'Current section properties (calculated)')}</div></div>`;
   }
   // ---------------- results ----------------
   function results(I) {

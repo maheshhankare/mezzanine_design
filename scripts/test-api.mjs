@@ -83,7 +83,7 @@ ok('non-admin cannot list users (403)', r.status === 403);
   let q = await A.req('/api/calc', { method: 'POST', body: { inputs: legacyInputs, units: {} } });
   const lres = q.status === 200 && typeof q.data === 'string' ? parse(q.data) : null;
   ok('legacy inputs (removed route) -> migrated, calculation withheld until reviewed', !!lres && lres.res.fatal === true && lres.res.msgs.some((m) => m.id === 'mig_ack'), q.status);
-  q = await A.req('/api/calc', { method: 'POST', body: { inputs: { ...legacyInputs, mig_ack: 'yes' }, units: {} } });
+  q = await A.req('/api/calc', { method: 'POST', body: { inputs: { code: 'IS', mb_gr: 'user', mb_fy: 355, mb_fu: 490, mig_ack: 'yes' }, units: {} } });
   const lok = q.status === 200 && typeof q.data === 'string' ? parse(q.data) : null;
   ok('legacy inputs after the review -> IS 800 route', !!lok && !lok.res.fatal && lok.res.R.code === 'IS');
 }
