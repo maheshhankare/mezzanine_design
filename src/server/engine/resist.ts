@@ -3,6 +3,7 @@ import "server-only";
 import { CHK } from '@/shared/check';
 import { MEM } from './member';
 import * as RD from '../frame/design/restraint';
+import * as TN from '../frame/design/tension';
 // ===== Fastener / weld / plate resistances, IS 800:2007 =====
 // Each function returns { Rd (N or N/mm), clause, steps }. A check that cites a provision that is not verified in the code register (src/shared/codeRegister.ts)
 // is reported as REVIEW by CHK.mk, whatever its value: formulas below are indicative until their clauses are verified.
@@ -26,7 +27,10 @@ export const RES: any = (() => {
       pullThrough() { return { Rd: NaN, clause: 'Thin sheet pull-through: outside IS 800:2007', steps: [], basis: 'none' }; },
       weldPerLength(a, fu) { const f = fu / (Math.sqrt(3) * gw) * a; return { Rd: f, clause: 'IS 800:2007 10.5.7.1.1', steps: [s('f_wd', 'f_u/(√3 γ_mw)', f / a, 'N/mm²'), s('per length', 'f_wd t_t', f, 'N/mm')] }; },
       weldThin() { return { Rd: NaN, clause: 'Welds on thin sheet: outside IS 800:2007', steps: [], basis: 'none' }; },
-      blockShear(Anv, Ant, fy, fu) { const Rd = Math.min(Anv * fy / (Math.sqrt(3) * g0) + 0.9 * Ant * fu / g1, 0.9 * Anv * fu / (Math.sqrt(3) * g1) + Ant * fy / g0); return { Rd, clause: 'IS 800:2007 6.4.1 (gross areas taken as net – conservative)', steps: [s('T_db', 'min(…)', Rd / 1e3, 'kN')] }; },
+      // 6.4.1: Avg / Atg are the gross areas of the printed expressions; when they are not given the net areas are used for both (conservative, as before)
+      blockShear(Anv, Ant, fy, fu, Avg = Anv, Atg = Ant) { if (!(Anv > 0 && Ant > 0 && Avg > 0 && Atg > 0)) return { Rd: 0, clause: 'IS 800:2007 6.4.1 (the holes remove the whole shear or tension area)', steps: [] }; const b = TN.blockShear({ Avg, Avn: Anv, Atg, Atn: Ant, fy, fu }); return { Rd: b.Tdb, clause: 'IS 800:2007 6.4.1' + (Avg === Anv && Atg === Ant ? ' (gross areas taken as net – conservative)' : ''), steps: [s('T_1', 'A_vg f_y/(√3 γ_m0) + 0.9 A_tn f_u/γ_m1', b.T1 / 1e3, 'kN'), s('T_2', '0.9 A_vn f_u/(√3 γ_m1) + A_tg f_y/γ_m0', b.T2 / 1e3, 'kN'), s('T_db', 'min(T_1, T_2)', b.Tdb / 1e3, 'kN')] }; },
+      // 6.3.1 / 6.3.2: rupture of the net section of a plate or threaded rod
+      netRupture(An, fu, rod = false) { const r = rod ? TN.threadedRodRupture({ An, fu }) : TN.plateRupture({ An, fu }); return { Rd: r.Tdn, clause: r.clause, steps: [s('A_n', '', An, 'mm²'), s('T_dn', '0.9 A_n f_u/γ_m1', r.Tdn / 1e3, 'kN')] }; },
       shearYield(Av, fy) { const Rd = Av * fy / (Math.sqrt(3) * g0); return { Rd, clause: 'IS 800:2007 8.4.1', steps: [s('V_d', 'A_v f_y/(√3 γ_m0)', Rd / 1e3, 'kN')] }; },
       shearRupture(Anv, fu) { const Rd = 0.9 * Anv * fu / (Math.sqrt(3) * g1); return { Rd, clause: 'IS 800:2007 6.4.1 (rupture term)', steps: [s('V_n', '0.9 A_vn f_u/(√3 γ_m1)', Rd / 1e3, 'kN')] }; },
       plateBending(W, fy, rho) { const Rd = W * fy * (1 - rho) / g0; return { Rd, clause: 'IS 800:2007 8.2.1.2 (elastic modulus)', steps: [s('M_d', 'Z_e f_y / γ_m0', Rd / 1e6, 'kNm')] }; },

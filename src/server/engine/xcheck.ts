@@ -8,7 +8,7 @@ import { SCHEMA } from '@/shared/schema';
 // No DOM here: the same code runs in every browser and in the Node tests, so a browser is compared against exactly the values the tests check.
 export const XCHK: any = (() => {
   // the calculation-engine version changes only when a formula, method or default that can change a result changes (the app version also changes for UI work)
-  const ENGINE_VERSION = '2.0.0 (IS 800:2007 only)';
+  const ENGINE_VERSION = '2.1.0 (IS 800:2007 only)';
   // project-file format: 1 = v1.0–v1.2 export {app, version, inputs, cases}; 2 = adds format, engine, fingerprint and a result summary for comparison
   const FORMAT = 'csbd-project', FORMAT_VERSION = 2;
   // tolerance for comparing the same calculation on two JavaScript engines (see METHODS.md, "Reproducibility"). Statuses must match exactly.

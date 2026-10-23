@@ -113,5 +113,22 @@ ok('M_cr of the verified-mode (uncredited) run equals the run without joists', n
 ok('the restraint list of the secondary marks credited / not credited consistently', none.sb.spec.restr.lat.every((q: any) => !q.credited) && usr.sb.spec.restr.lat.length === 5 && usr.sb.spec.restr.lat.every((q: any) => q.credited));
 ok('no check of the joist cites another standard', [...none.j.checks, ...usr.j.checks].every((c: any) => !/EN ?1993|AISC|AISI/.test(c.clause + c.name + c.note)));
 
+// ---- knee brace in tension: net-section rupture (6.3.3 / 6.3.4) and block shear of the end (6.4.1): hand values, status gate, invalid geometry
+// ISA 100x100x10, f_y 250, f_u 410, M20 (hole 22), three bolts at 50, e_1 = 40, e_2 = 50 (w_1 = 50): rupture 215 496 + 162 195.1 = 377 691.1 N; block shear L_v = 140: A_vg 1400, A_vn 850, A_tg 500, A_tn 390:
+// T_1 = 183 702.4 + 115 128 = 298 830; T_2 = 144 861 + 113 636 = 258 505 N
+const knee = (o: any = {}) => { const r: any = MODEL.compute({ ...SCHEMA.defaults(), k_use: 'yes', k_nL: '1', k_b: 100, k_h: 100, k_t: 10, k_nb: 3, k_p1: 50, k_e1: 40, k_e2: 50, k_d: 20, k_fy: 250, k_fu: 410, ...o }); const out: any = {}; for (const row of r.summary?.rows || []) for (const c of row.list) if (/^Knee brace (in tension|end)/.test(c.name)) out[c.name.split(':')[0] + (c.pending ? ' (pending)' : '')] = c; return out; };
+const k1 = knee();
+const kr = k1['Knee brace in tension'], kb = k1['Knee brace end'];
+ok('knee brace: rupture resistance by hand (377 691 N) and block shear by hand (258 505 N)', kr && kb && Math.abs(kr.Rd - 377691.1) < 1 && Math.abs(kb.Rd - 258505) < 1, `${kr && kr.Rd} ${kb && kb.Rd}`);
+ok('knee brace: both checks are REVIEW (provisional clauses), never PASS or FAIL', kr.status === 'REVIEW' && kb.status === 'REVIEW' && kr.basis === 'unverified' && kb.basis === 'unverified');
+ok('knee brace: the demand is the same tension in both checks and the utilisation follows Ed / Rd', near(kr.Ed, kb.Ed, 1e-12) && near(kr.eta, kr.Ed / kr.Rd, 1e-12) && near(kb.eta, kb.Ed / kb.Rd, 1e-12));
+const k2 = knee({ k_nL: '2' });
+ok('knee brace: two angles back to back carry twice the resistance (6.3.4 proposal and per-angle block shear)', Math.abs(k2['Knee brace in tension'].Rd - 2 * 377691.1) < 2 && Math.abs(k2['Knee brace end'].Rd - 2 * 258505) < 2);
+ok('knee brace: a longer end distance never reduces the block-shear resistance, a larger bolt hole never raises the rupture resistance', knee({ k_e1: 60 })['Knee brace end'].Rd >= kb.Rd && knee({ k_d: 24 })['Knee brace in tension'].Rd <= kr.Rd);
+const kbad = knee({ k_e2: 120 });
+ok('knee brace: e_2 outside the leg gives two pending checks (rupture and block shear), no crash and no resistance', !kbad['Knee brace in tension'] && !kbad['Knee brace end'] && !!kbad['Knee brace in tension (pending)'] && !!kbad['Knee brace end (pending)'] && kbad['Knee brace in tension (pending)'].status === 'REVIEW' && kbad['Knee brace end (pending)'].status === 'REVIEW' && kbad['Knee brace end (pending)'].Rd === undefined, JSON.stringify(Object.keys(kbad)));
+const kbad2 = knee({ k_nb: 1, k_e1: 5 });
+ok('knee brace: one bolt with an end distance smaller than the hole radius: block shear pending, rupture (not affected) still checked', !kbad2['Knee brace end'] && !!kbad2['Knee brace end (pending)'] && kbad2['Knee brace end (pending)'].status === 'REVIEW' && !!kbad2['Knee brace in tension'] && !kbad2['Knee brace in tension (pending)'], JSON.stringify(Object.keys(kbad2)));
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

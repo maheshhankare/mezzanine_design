@@ -123,7 +123,7 @@ export const CONN: any = (() => {
         const sn = P.shearRupture((hp - nv * d0) * tp, pfu);
         add(CHK.mk({ grp, name: 'Plate net shear', clause: sn.clause, Ed: Vp, Rd: sn.Rd, unit: 'kN', fmt: kN, basis: sn.basis || 'code', steps: sn.steps }));
         const Anv = tp * (hp - eP1t - (nv - 0.5) * d0), Ant = tp * (eP2 + (nh - 1) * c.p2 - (nh - 0.5) * d0);
-        const bk = P.blockShear(Math.max(0, Anv), Math.max(0, Ant), pfy, pfu, true);
+        const Avg = tp * (hp - eP1t), Atg = tp * (eP2 + (nh - 1) * c.p2), bk = P.blockShear(Math.max(0, Anv), Math.max(0, Ant), pfy, pfu, Math.max(Avg, Anv, 0), Math.max(Atg, Ant, 0));
         add(CHK.mk({ grp, name: 'Plate block tearing', clause: bk.clause, Ed: Vp, Rd: bk.Rd, unit: 'kN', fmt: kN, steps: bk.steps, why: why.block, fix: fix.block }));
       }
       const W = tp * hp * hp / 6, Vpl = sy.Rd, rho = Vp > 0.5 * Vpl ? (2 * Vp / Vpl - 1) ** 2 : 0, pb = P.plateBending(W, pfy, rho);

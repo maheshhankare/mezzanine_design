@@ -19,6 +19,7 @@
     "test:integration": "tsx scripts/test-integration.ts",
     "test:no-en": "tsx scripts/test-no-en.ts",
     "test:restraint": "tsx --conditions=react-server scripts/test-restraint.ts",
+    "test:tension": "tsx scripts/test-tension.ts",
     "test:legacy": "tsx --conditions=react-server scripts/test-legacy.ts",
     "test:pdf": "tsx --conditions=react-server scripts/test-pdf.ts",
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts"
