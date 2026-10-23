@@ -15,7 +15,8 @@ export interface FrameStore {
   listProjects(ownerId: string): Promise<Omit<StoredProject, 'data'>[]>;
   deleteProject(id: string, ownerId: string): Promise<boolean>;
   addRun(run: Omit<StoredRun, 'id' | 'createdAt'>): Promise<StoredRun>;
-  listRuns(projectId: string): Promise<Omit<StoredRun, 'record' | 'settings'>[]>;
+  /** the run list of the project page: no record, settings or summary (each run's are read with getRun when its record or report is opened) */
+  listRuns(projectId: string): Promise<Omit<StoredRun, 'record' | 'settings' | 'summary'>[]>;
   getRun(runId: string, ownerId: string): Promise<StoredRun | null>;
 }
 
@@ -38,6 +39,6 @@ export class MemoryFrameStore implements FrameStore {
   async listProjects(ownerId: string) { return [...this.projects.values()].filter((p) => p.ownerId === ownerId).map(({ data: _d, ...rest }) => rest); }
   async deleteProject(id: string, ownerId: string) { const p = this.projects.get(id); if (!p || p.ownerId !== ownerId) return false; this.projects.delete(id); this.runs = this.runs.filter((r) => r.projectId !== id); return true; }
   async addRun(run: Omit<StoredRun, 'id' | 'createdAt'>) { const r: StoredRun = { ...run, id: uid(), createdAt: new Date().toISOString() }; this.runs.push(JSON.parse(JSON.stringify(r))); return r; }
-  async listRuns(projectId: string) { return this.runs.filter((r) => r.projectId === projectId).map(({ record: _r, settings: _s, ...rest }) => rest).reverse(); }
+  async listRuns(projectId: string) { return this.runs.filter((r) => r.projectId === projectId).map(({ record: _r, settings: _s, summary: _m, ...rest }) => rest).reverse(); }
   async getRun(runId: string, ownerId: string) { const r = this.runs.find((x) => x.id === runId); const p = r && this.projects.get(r.projectId); return r && p && p.ownerId === ownerId ? JSON.parse(JSON.stringify(r)) : null; }
 }

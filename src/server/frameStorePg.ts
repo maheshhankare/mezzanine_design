@@ -32,8 +32,8 @@ export const pgFrameStore: FrameStore = {
   },
   async listRuns(projectId) {
     if (!isUuid(projectId)) return [];
-    const rows = await q(`select id, project_id, user_id, model_revision, model_fingerprint, engine_version, status, label, summary, created_at from frame_runs where project_id = $1 order by created_at desc limit 100`, [projectId]);
-    return rows.map((r: any) => { const { record: _r, settings: _s, ...rest } = runOf({ ...r, record: null, settings: null }); return rest; });
+    const rows = await q(`select id, project_id, user_id, model_revision, model_fingerprint, engine_version, status, label, created_at from frame_runs where project_id = $1 order by created_at desc limit 100`, [projectId]);
+    return rows.map((r: any) => { const { record: _r, settings: _s, summary: _m, ...rest } = runOf({ ...r, record: null, settings: null, summary: null }); return rest; });
   },
   async getRun(runId, ownerId) {
     if (!isUuid(runId)) return null;

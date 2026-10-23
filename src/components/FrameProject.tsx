@@ -14,7 +14,7 @@ const Chk = ({ label, checked, onChange, disabled }: { label: string; checked: b
 );
 const BAD = { color: 'var(--bad, #b3261e)' };
 
-type RunRow = { id: string; modelRevision: number; status: string; label: string; createdAt: string; current: boolean; note: string; summary: any };
+type RunRow = { id: string; modelRevision: number; status: string; label: string; createdAt: string; current: boolean; note: string };
 type Loaded = { id: string; name: string; revision: number; project: FrameProjectData; migrated: boolean; flags: string[]; runs: RunRow[] };
 
 /**

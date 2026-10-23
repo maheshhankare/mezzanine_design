@@ -1,4 +1,5 @@
 // Workflow integration: project -> settings -> validation -> solver -> results -> IS 800 design -> calculation record -> report, with an in-memory store.   npm run test:integration
+import { readFileSync } from 'node:fs';
 import { MemoryFrameStore } from '../src/server/frameStore';
 import { createFrameProject, saveFrameProject, readFrameProject, runStoredProject, listRunsWithStatus, readRun, parseProject, ServiceError } from '../src/server/frameService';
 import { frameReportPdf } from '../src/server/frameReport';
@@ -93,6 +94,24 @@ const rejects = async (name: string, f: () => Promise<unknown>, status?: number)
   // report from the stored record only
   const pdf = await frameReportPdf(rec);
   ok('report is a PDF', pdf.length > 3000 && Buffer.from(pdf.slice(0, 5)).toString() === '%PDF-');
+
+  // opening a project: the run list carries only what the page shows (no summary, record or settings); the summary of every run is still
+  // stored and is read with the run record (Record / PDF). The design run makes the summary large (about 0.7 MB for the benchmark).
+  const od = await runStoredProject(store, U, c.id);
+  ok('design run stored with its summary (saved data unchanged)', !!od.runId && !!(store.runs.find((r) => r.id === od.runId) as any)?.summary?.design);
+  const list = await listRunsWithStatus(store, U, c.id);
+  const SHOWN = ['createdAt', 'current', 'engineVersion', 'id', 'label', 'modelFingerprint', 'modelRevision', 'note', 'projectId', 'status', 'userId'];
+  ok('open project: run list has exactly the listed fields (no summary, record, settings)', list.length === 2 && list.every((r) => JSON.stringify(Object.keys(r).sort()) === JSON.stringify(SHOWN)), JSON.stringify(Object.keys(list[0] ?? {})));
+  ok('open project: what the page shows is present (time, revision, status, label, note, current)', list.every((r) => /^\d{4}-\d\d-\d\dT/.test(r.createdAt) && Number.isInteger(r.modelRevision) && !!r.status && !!r.label && !!r.note && typeof r.current === 'boolean'));
+  ok('open project: newest run first, the design run is the current model', list[0].id === od.runId && list[0].current && !list[1].current);
+  const listBytes = new TextEncoder().encode(JSON.stringify(list)).length;
+  ok('open project: run list is small (under 2 KB for 2 runs; was about 0.7 MB per design run)', listBytes < 2000, `${listBytes} bytes`);
+  const rd = await readRun(store, U, od.runId!);
+  ok('Record / PDF: the run read on its own still has its summary and record', !!(rd.run as any).summary?.design && (rd.run as any).record?.sections?.length === 15 && rd.current);
+  ok('Record / PDF: report of the design run still builds', (await frameReportPdf((rd.run as any).record)).length > 3000);
+  const pg = readFileSync('src/server/frameStorePg.ts', 'utf8'), pgList = pg.slice(pg.indexOf('async listRuns'), pg.indexOf('async getRun'));
+  ok('PostgreSQL store: the run-list query no longer reads the summary column; getRun still reads every column', /select id, project_id/.test(pgList) && !/\bsummary\b/.test(pgList.split('from frame_runs')[0]) && /select r\.\* from frame_runs/.test(pg));
+  ok('project page: does not use a run summary from the list', !/r\.summary|summary: any/.test(readFileSync('src/components/FrameProject.tsx', 'utf8')));
 
   // invalid project data
   const invalid: any = JSON.parse(JSON.stringify(base)); invalid.frame.members[0].n2 = 9999999;
