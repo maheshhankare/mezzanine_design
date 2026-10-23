@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, apiUpload } from '@/lib/api';
 import { DESIGN_STANDARD_TITLE } from '@/shared/analysisSettings';
 
 type Row = { id: string; name: string; revision: number; updatedAt: string };
@@ -22,7 +22,7 @@ export default function FrameProjects() {
     setBusy(true); setMsg('');
     try {
       const project = JSON.parse(await f.text());
-      const out = await api<{ id: string; flags: string[]; reviewRequired: boolean }>('/api/frame/projects', 'POST', { project });
+      const out = await apiUpload<{ id: string; flags: string[]; reviewRequired: boolean }>('/api/frame/projects', 'POST', { project });
       location.href = `/frame/${out.id}`;
     } catch (e: any) { setMsg(e.data?.issues ? `${e.message}: ${e.data.issues.slice(0, 5).map((i: any) => `${i.path} ${i.message}`).join('; ')}` : e.message); setBusy(false); }
   };

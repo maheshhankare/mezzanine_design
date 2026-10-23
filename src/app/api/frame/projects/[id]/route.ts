@@ -1,4 +1,4 @@
-import { route, readJson, audit, HttpError } from '@/server/http';
+import { route, readFrameProjectBody, audit, HttpError } from '@/server/http';
 import { pgFrameStore } from '@/server/frameStorePg';
 import { readFrameProject, saveFrameProject, listRunsWithStatus, ServiceError } from '@/server/frameService';
 
@@ -18,7 +18,7 @@ export const GET = route({ auth: 'user' }, async ({ params, user }) => {
 // PUT /api/frame/projects/:id { project, revision, confirmSettings? }: save (revision-checked). confirmSettings clears the review of migrated settings.
 export const PUT = route({ auth: 'user' }, async ({ req, params, user }) => {
   const { id } = await params;
-  const body = await readJson(req, 12_000_000);
+  const body = await readFrameProjectBody(req);
   if (!Number.isInteger(body.revision)) throw new HttpError(422, 'The revision of the project being saved is required');
   const out = await wrap(() => saveFrameProject(pgFrameStore, user.id, id, body.revision, body.project, { confirmSettings: body.confirmSettings === true }));
   await audit(user, 'frame.update', req, id, { confirm: body.confirmSettings === true });

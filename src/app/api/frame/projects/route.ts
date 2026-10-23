@@ -1,4 +1,4 @@
-import { route, readJson, audit, HttpError } from '@/server/http';
+import { route, readFrameProjectBody, audit, HttpError } from '@/server/http';
 import { pgFrameStore } from '@/server/frameStorePg';
 import { createFrameProject, ServiceError } from '@/server/frameService';
 
@@ -12,7 +12,7 @@ export const GET = route({ auth: 'user' }, async ({ user }) => ({ projects: awai
 
 // POST /api/frame/projects: create a frame project from project data (schema "frame-project-1"). Settings of an older version are migrated and flagged for review.
 export const POST = route({ auth: 'user' }, async ({ req, user }) => {
-  const body = await readJson(req, 12_000_000);
+  const body = await readFrameProjectBody(req);
   const out = await wrap(() => createFrameProject(pgFrameStore, user.id, body.project ?? body));
   await audit(user, 'frame.create', req, out.id, {});
   return out;

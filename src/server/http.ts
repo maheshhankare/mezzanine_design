@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import { currentUser, type SessionUser } from './auth/session';
 import { q } from './db';
+import { FRAME_UPLOAD_MAX_BYTES, uploadTooLargeMessage } from '@/shared/uploadLimit';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public extra?: Record<string, unknown>) {
@@ -36,18 +37,24 @@ export function rateLimit(key: string, max: number, windowMs: number) {
   if (buckets.size > 5000) for (const [k, v] of buckets) if (!v.length || now - v[v.length - 1] > windowMs) buckets.delete(k);
 }
 
-export async function readJson(req: NextRequest, maxBytes = 2_000_000): Promise<any> {
+/** Reads a JSON body of at most maxBytes BYTES (the declared Content-Length and the bytes actually received; not JavaScript characters).
+ *  tooLarge gives the 413 message (default 'Request too large'). */
+export async function readJson(req: NextRequest, maxBytes = 2_000_000, tooLarge: (bytes?: number) => string = () => 'Request too large'): Promise<any> {
   const len = +(req.headers.get('content-length') || 0);
-  if (len > maxBytes) throw new HttpError(413, 'Request too large');
+  if (len > maxBytes) throw new HttpError(413, tooLarge(len), { limitBytes: maxBytes });
   if (!(req.headers.get('content-type') || '').includes('application/json')) throw new HttpError(415, 'JSON body expected');
-  const text = await req.text();
-  if (text.length > maxBytes) throw new HttpError(413, 'Request too large');
+  const buf = await req.arrayBuffer();
+  if (buf.byteLength > maxBytes) throw new HttpError(413, tooLarge(buf.byteLength), { limitBytes: maxBytes });
+  const text = new TextDecoder().decode(buf); // UTF-8, invalid sequences replaced, as req.text() does
   try {
     return JSON.parse(text);
   } catch {
     throw new HttpError(400, 'Invalid JSON');
   }
 }
+
+/** Body of the frame-project import and save routes: the shared 4.4 MB limit (src/shared/uploadLimit.ts) with the readable message. */
+export const readFrameProjectBody = (req: NextRequest) => readJson(req, FRAME_UPLOAD_MAX_BYTES, (bytes) => uploadTooLargeMessage(bytes, true));
 
 type Ctx = { user: SessionUser | null; req: NextRequest; params: any };
 type Opts = { auth?: 'none' | 'user' | 'admin' };

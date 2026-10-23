@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { api, download } from '@/lib/api';
+import { api, apiUpload, download } from '@/lib/api';
 import { DESIGN_STANDARD_TITLE, optionAvailability, validateSettings, type AnalysisSettings } from '@/shared/analysisSettings';
 import type { FrameProjectData } from '@/shared/frameProject';
 
@@ -45,7 +45,7 @@ export default function FrameProject({ id }: { id: string }) {
     if (!d || !s) return;
     setBusy('save'); setMsg('');
     try {
-      const out = await api<any>(`/api/frame/projects/${id}`, 'PUT', { project: { ...d.project, settings: s }, revision: d.revision, confirmSettings });
+      const out = await apiUpload<any>(`/api/frame/projects/${id}`, 'PUT', { project: { ...d.project, settings: s }, revision: d.revision, confirmSettings });
       setMsg(out.modelChanged ? 'Saved. The model changed: earlier runs now belong to an earlier model revision.' : 'Saved.');
       await load();
     } catch (e: any) { setMsg(e.data?.errors ? `${e.message}: ${e.data.errors.map((i: any) => i.message).join(' ')}` : e.message); }

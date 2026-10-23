@@ -1,5 +1,6 @@
 import { parse } from 'devalue';
 import { UNITS } from '@/shared/units';
+import { FRAME_UPLOAD_MAX_BYTES, uploadTooLargeMessage, utf8Bytes } from '@/shared/uploadLimit';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: any) {
@@ -27,9 +28,19 @@ async function request(path: string, init: RequestInit): Promise<Response> {
   if (!r.ok) {
     let data: any = null;
     try { data = await r.json(); } catch { /* not JSON */ }
-    throw new ApiError(r.status, data?.error || `Request failed (${r.status})`, data);
+    // 413 without a message of ours: refused before the application ran (Vercel answers FUNCTION_PAYLOAD_TOO_LARGE as plain text)
+    const fallback = r.status === 413 ? 'The data sent is larger than the server accepts (HTTP 413). Nothing was saved.' : `Request failed (${r.status})`;
+    throw new ApiError(r.status, data?.error || fallback, data);
   }
   return r;
+}
+
+/** Frame project import / save: the JSON is measured in UTF-8 bytes BEFORE sending; above the shared 4.4 MB limit nothing is sent. */
+export async function apiUpload<T = any>(path: string, method: string, body: unknown): Promise<T> {
+  const text = JSON.stringify(body);
+  const bytes = utf8Bytes(text);
+  if (bytes > FRAME_UPLOAD_MAX_BYTES) throw new ApiError(413, uploadTooLargeMessage(bytes), { tooLarge: true, bytes, limitBytes: FRAME_UPLOAD_MAX_BYTES });
+  return (await request(path, { method, headers: { 'Content-Type': 'application/json' }, body: text })).json();
 }
 
 const jsonInit = (method: string, body?: unknown, signal?: AbortSignal): RequestInit => ({

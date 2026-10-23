@@ -46,7 +46,7 @@ Not tested: production; a real user's data; the PDF button of the `/frame` page 
 | Run route time limit (`maxDuration`) | 300 s |
 | Other `/api/frame` routes | 60 s |
 | Rate limit of runs | 6 per user per minute |
-| Request body for creating / saving a project | accepted up to 12 MB in the code; Vercel's own request limit is 4.5 MB; the benchmark project is 0.46 MB |
+| Request body for creating / saving a project | 4.4 MB (4 400 000 bytes, UTF-8), one shared limit for the frame-project import and save, locally and deployed (`src/shared/uploadLimit.ts`; changed 2026-10-23 from 12 MB, which Vercel's own 4.5 MB request limit made unreachable); the browser checks the size before sending and sends nothing above the limit; the benchmark project is 0.46 MB |
 | Expected scaling | roughly linear in the number of degrees of freedom, with Newton iterations: about 3 s for 11,500 DOF, 12 s for 29,000, 30 s for 38,600 locally; multiply by about 5 on Vercel. A model about twice the benchmark size is expected to approach or exceed the 300 s limit |
 | Region | Vercel `iad1` (US East); Neon database `ap-southeast-1` (Singapore): every database call crosses the Pacific |
 
