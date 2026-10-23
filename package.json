@@ -20,6 +20,7 @@
     "test:no-en": "tsx scripts/test-no-en.ts",
     "test:restraint": "tsx --conditions=react-server scripts/test-restraint.ts",
     "test:tension": "tsx scripts/test-tension.ts",
+    "test:auth": "tsx scripts/test-auth-jose.ts",
     "test:legacy": "tsx --conditions=react-server scripts/test-legacy.ts",
     "test:pdf": "tsx --conditions=react-server scripts/test-pdf.ts",
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts"

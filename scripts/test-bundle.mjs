@@ -26,5 +26,21 @@ for (const m of secrets) {
   ok(`secret marker not in the browser bundle: "${m}"`, hits.length === 0, hits.slice(0, 2).join(', '));
 }
 ok('no source maps published', files.filter((f) => f.endsWith('.map')).length === 0);
+
+// The middleware (Edge runtime). The build warns that jose uses CompressionStream / DecompressionStream because it scans every module the jose
+// package exports; only its JWE "zip" code uses them. This checks that the middleware actually built and deployed does not contain that code,
+// and still contains the HS256 session check.
+const mm = '.next/server/middleware-manifest.json';
+if (!existsSync(mm)) ok('middleware manifest present', false, mm);
+else {
+  const entry = JSON.parse(readFileSync(mm, 'utf8')).middleware?.['/'];
+  ok('middleware is built', !!entry && entry.files.length > 0);
+  const mfiles = (entry?.files ?? []).map((f) => [f, readFileSync(join('.next', f), 'utf8')]);
+  for (const m of ['CompressionStream', 'DecompressionStream', 'deflate-raw']) {
+    const hits = mfiles.filter(([, t]) => t.includes(m)).map(([f]) => f);
+    ok(`middleware bundle does not contain "${m}"`, hits.length === 0, hits.join(', '));
+  }
+  ok('middleware bundle still contains the HS256 session check', mfiles.some(([, t]) => t.includes('HS256')));
+}
 console.log(failed ? `\n${failed} check(s) FAILED` : '\nall checks passed');
 process.exit(failed ? 1 : 0);
