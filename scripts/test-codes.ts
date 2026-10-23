@@ -9,7 +9,7 @@ import {
 } from '../src/server/frame/codes/is800';
 import { bowGeometry, swayLoads, bowEquivalentLoads } from '../src/server/frame/imperfection';
 import { governingMoment, buildCalculationRecord, RECORD_TITLES } from '../src/server/frame/record';
-import { CODE_REGISTER, availabilityOf, routeAvailability, registerProblems, type CodeItem } from '../src/shared/codeRegister';
+import { CODE_REGISTER, IS800_EDITION, availabilityOf, routeAvailability, registerProblems, type CodeItem } from '../src/shared/codeRegister';
 import { defaultSettings, validateSettings, optionAvailability, migrateSettings, type AnalysisSettings } from '../src/shared/analysisSettings';
 import { existsSync } from 'node:fs';
 import { clauseVerified } from '../src/shared/check';
@@ -229,6 +229,10 @@ const portal = (L: number, Ic: number, Ib: number, div = 8): FrameModel => ({
   const id = { projectId: 'p1', projectName: 'Test portal', modelRevision: 3, runId: 'run-1', modelFingerprint: 'abc', engineVersion: 'test', createdAt: '2026-01-01T00:00:00Z' };
   const cs = [{ id: 'CO1', name: 'ULS', status: res.status, converged: res.converged, iterations: res.totalIterations, steps: res.steps.length, message: res.message, maxDisplacement: null, reactionSum: [0, 0, 0] as [number, number, number] }];
   const rec = buildCalculationRecord({ identity: id, project, settingsUsed: settings, combinations: cs, imperfections: [{ kind: 'notional', source: 'code', clause: 'IS 800 4.3.6', representation: 'equivalent loads', magnitude: '0.5 %', direction: '+X', members: 'roof' }] });
+  // edition line (section 2): the 2007 text is the basis; the amendments are named, not applied; the known differences are in section 14
+  assert('record: section 2 prints the edition used for the checks', rec.sections[1].lines.includes(`Edition used for the checks: ${IS800_EDITION}`));
+  assert('edition: the 2007 text without amendments is the basis, the two amendments are named, no official copy, unofficial evidence labelled', ['Third Revision, December 2007', 'without amendments', 'lists two amendments (No. 1 and No. 2)', 'no official copy', 'follow the 2007 text', 'unofficial copy', 'section 14'].every((w) => IS800_EDITION.includes(w)) && !/applied|verified/i.test(IS800_EDITION));
+  assert('record: section 14 does list the amendment differences the edition line points to', rec.sections[13].lines.some((l) => l.includes('AMENDMENT NOTE (UNOFFICIAL EVIDENCE')));
   assert('record: all 15 sections are present', rec.sections.length === 15 && rec.sections.every((s, i) => s.title === RECORD_TITLES[i]));
   assert('record: every section has content (or states that there is none)', rec.sections.every((s) => s.lines.length > 0));
   assert('record: carries the project id, model revision, run id and fingerprint', /p1/.test(rec.markdown) && /Model revision: 3/.test(rec.markdown) && /run-1/.test(rec.markdown) && /abc/.test(rec.markdown));

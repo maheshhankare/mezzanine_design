@@ -41,7 +41,7 @@ export interface CodeItem {
   outstanding: string; // what is still needed; '' when nothing
 }
 
-export const IS800_EDITION = 'IS 800:2007 (Third Revision, December 2007), supplied scan; amendments not supplied';
+export const IS800_EDITION = 'IS 800:2007 (Third Revision, December 2007), supplied scan, without amendments. The BIS standards portal lists two amendments (No. 1 and No. 2); no official copy of either was available. The checks follow the 2007 text; known differences from Amendment No. 1, seen only in an unofficial copy, are listed in section 14.';
 const T = 'scripts/test-codes.ts';
 const TD = 'scripts/test-design.ts';
 
