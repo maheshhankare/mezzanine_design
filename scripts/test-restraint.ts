@@ -161,5 +161,14 @@ const c10 = hd({ ci_d: 10 }).m, c12 = hd({ ci_d: 12 }).m;
 const flagged = (m: any) => Object.keys(m).filter((k) => /^ci\|(Bearing on the (C web|plate|angle leg|U-cleat)|C web net shear along the bolt column)/.test(k) && /outside Table 19/.test(m[k].note || ''));
 ok('below 12 mm: the connection checks that use the hole diameter carry the flag; at 12 mm there is none', flagged(c10).length >= 2 && flagged(c12).length === 0, JSON.stringify(flagged(c10)));
 
+// ---- 7.8.4: two angles back to back: bolts between the angles not less than 16 mm (leg <= 10 mm), 20 mm (<= 16 mm), 22 mm (> 16 mm): REVIEW flag, nothing changed automatically
+const conn78 = (o: any) => { const r: any = MODEL.compute({ ...SCHEMA.defaults(), k_use: 'yes', k_b: 100, k_h: 100, k_nb: 3, k_p1: 90, k_e1: 60, k_e2: 50, k_fy: 250, k_fu: 410, ...o }); const out: any[] = []; for (const row of r.summary?.rows || []) for (const c of row.list) if (/Knee brace, two angles back to back/.test(c.name)) out.push(c); return out; };
+const f12 = conn78({ k_nL: '2', k_t: 10, k_d: 12 });
+ok('7.8.4: two angles, leg 10 mm, bolt 12 mm: one REVIEW (pending) check says the bolt is below the 16 mm minimum', f12.length === 1 && f12[0].status === 'REVIEW' && f12[0].pending === true && f12[0].Rd === undefined && /below the 7\.8\.4 minimum \(16 mm\)/.test(f12[0].note) && t19step(f12[0], /^d_min/) === 16, JSON.stringify(f12.map((c: any) => c.note)));
+ok('7.8.4: the check keeps the missing-input warning (connections between the angles are not inputs) even when the diameter is enough', conn78({ k_nL: '2', k_t: 10, k_d: 16 }).every((c: any) => !/below the 7\.8\.4/.test(c.note) && /not inputs of the knee brace/.test(c.note) && c.status === 'REVIEW'));
+ok('7.8.4: the minimum follows the thickness (<= 10: 16, <= 16: 20, > 16: 22 mm)', t19step(conn78({ k_nL: '2', k_t: 12, k_d: 12 })[0], /^d_min/) === 20 && t19step(conn78({ k_nL: '2', k_t: 16, k_d: 12 })[0], /^d_min/) === 20 && t19step(conn78({ k_nL: '2', k_t: 17, k_d: 12 })[0], /^d_min/) === 22 && /below the 7\.8\.4 minimum \(22 mm\)/.test(conn78({ k_nL: '2', k_t: 17, k_d: 20 })[0].note));
+ok('7.8.4: a single angle has no such check (7.8 concerns two components back to back)', conn78({ k_nL: '1', k_t: 10, k_d: 12 }).length === 0);
+ok('7.8.4: the flag changes no existing assumption: the bolt shear and bearing checks of the knee brace use the entered 12 mm bolt, as before', (() => { const r: any = MODEL.compute({ ...SCHEMA.defaults(), k_use: 'yes', k_nL: '2', k_t: 10, k_d: 12, k_b: 100, k_h: 100 }); const names: string[] = []; for (const row of r.summary?.rows || []) for (const c of row.list) if (/Knee brace bolts: shear/.test(c.name)) names.push(c.name); return names.length === 1; })());
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

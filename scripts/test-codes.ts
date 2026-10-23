@@ -12,6 +12,7 @@ import { governingMoment, buildCalculationRecord, RECORD_TITLES } from '../src/s
 import { CODE_REGISTER, availabilityOf, routeAvailability, registerProblems, type CodeItem } from '../src/shared/codeRegister';
 import { defaultSettings, validateSettings, optionAvailability, migrateSettings, type AnalysisSettings } from '../src/shared/analysisSettings';
 import { existsSync } from 'node:fs';
+import { clauseVerified } from '../src/shared/check';
 
 let failed = 0;
 const rows: string[] = [];
@@ -141,6 +142,18 @@ const portal = (L: number, Ic: number, Ib: number, div = 8): FrameModel => ({
   assert('register: IS 800 notional loads provisional (distribution not in the clause)', routeAvailability('is800.notional-loads').state === 'provisional');
   assert('register: IS 800 second-order analysis (B-2) verified', routeAvailability('is800.second-order').state === 'verified');
   assert('register: effective length (7.2) is pending: the design requires a user input', CODE_REGISTER.find((i) => i.id === 'IS800-7.2')!.status === 'pending');
+  // ---- IS800-10.3 split (23 Oct 2026): bearing-bolt equations verified; Table 19 split by column; the slot provisions are NOT modelled and never verified
+  const item = (id: string) => CODE_REGISTER.find((i) => i.id === id)!;
+  assert('register split: bearing-bolt equations stay verified, standard round holes verified, over-size provisional, slots pending', item('IS800-10.3').status === 'verified' && item('IS800-10.2.1-round').status === 'verified' && item('IS800-10.2.1-oversize').status === 'provisional' && item('IS800-10.2.1-slots').status === 'pending');
+  assert('register split: IS800-10.3 no longer lists 10.2.1 or Table 19, and says where the hole rules went', !/10\.2\.1|Table 19/.test(item('IS800-10.3').clause) && /IS800-10\.2\.1-slots/.test(item('IS800-10.3').requirement) && /WITHOUT its amendments/.test(item('IS800-10.3').outstanding) && /History/.test(item('IS800-10.3').outstanding));
+  assert('register split: the slot item is pending, its text is not marked verified, it has no implementation and says NOT MODELLED', item('IS800-10.2.1-slots').textVerified === false && item('IS800-10.2.1-slots').implementation === '' && /NOT MODELLED/.test(item('IS800-10.2.1-slots').outstanding) && /Nothing here is verified/.test(item('IS800-10.2.1-slots').outstanding));
+  assert('register split: no VERIFIED item claims Table 19 columns 5-6, 10.2.1 c) or slotted holes', CODE_REGISTER.filter((i) => i.status === 'verified').every((i) => !/columns 5-6|10\.2\.1 c\)|slotted holes/.test(i.clause)));
+  assert('register split: the over-size item states that its conditions of use and 10.2.4.1 are not modelled', /NOT modelled/.test(item('IS800-10.2.1-oversize').outstanding) && /10\.2\.4\.1/.test(item('IS800-10.2.1-oversize').outstanding));
+  assert('register split: a check citing Table 19, 10.2.4.1, 10.3.3.3 or 10.4 is not verified; the bolt clauses and 10.2.1 / 10.2.2 are', !clauseVerified('IS 800:2007 Table 19') && !clauseVerified('IS 800:2007 10.2.4.1') && !clauseVerified('IS 800:2007 10.3.3.3') && !clauseVerified('IS 800:2007 10.4') && ['10.2.1', '10.2.2', '10.2.4.2', '10.3.2', '10.3.3', '10.3.3.1', '10.3.4', '10.3.5', '10.3.6'].every((c) => clauseVerified('IS 800:2007 ' + c)));
+  assert('register split: every hole-size item names an IS 800 page image as evidence', ['IS800-10.2.1-round', 'IS800-10.2.1-oversize', 'IS800-10.2.1-slots'].every((id) => /IS 800:2007 p\. 73/.test(item(id).evidence)));
+  // ---- IS800-7.5 angle struts: pending, documentation only; the missing items are listed
+  assert('register 7.5: angle struts stay PENDING and the angle route stays blocked; nothing implemented', item('IS800-7.5').status === 'pending' && item('IS800-7.5').implementation === '' && item('IS800-7.5').validation === '' && routeAvailability('is800.design.angles').state === 'blocked');
+  assert('register 7.5: the missing references, decisions and inputs are listed (amendments, fixity, load-case type, strut length, connector geometry, A1-A4)', ['Amendments No. 1 and No. 2', 'fixity', 'load-case type', 'strut length', 'connectors between the angles', 'A1', 'A2', 'A3', 'A4', '7.8.4'].every((w) => item('IS800-7.5').outstanding.includes(w)) && /NOT approved/.test(item('IS800-7.5').evidence));
   const tampered: CodeItem[] = CODE_REGISTER.map((i) => (i.id === 'IS800-B-2.1' ? { ...i, status: 'pending' as const } : i));
   assert('register: one pending item blocks the whole feature', availabilityOf(tampered, 'is800.second-order').state === 'blocked');
   const bad: CodeItem[] = CODE_REGISTER.map((i) => (i.id === 'IS800-members-open' ? { ...i, status: 'verified' as const } : i));

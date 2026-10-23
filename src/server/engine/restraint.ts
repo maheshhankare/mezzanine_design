@@ -192,6 +192,13 @@ export const RST: any = (() => {
     // angle struts (IS 800 7.5) are not verified in the code register: the compression check is pending, the demand is reported; the tension checks (6.3.3, 6.4.1) are provisional (REVIEW)
     const demandSteps = ga ? [s('N_Ed', 'global frame analysis: ' + ga.case, kN(N), 'kN')] : [s('H', phiTxt + ' × N + H_add', kN(H), 'kN'), ...(Ng ? [s('R_knee', `largest knee reaction of the ${x.grav.where} model (ULS)`, kN(x.grav.R), 'kN'), s('N_grav', 'R_knee / sin θ', kN(Ng), 'kN'), s('N_Ed', 'H h_c / (d_v cos θ) + N_grav', kN(N), 'kN')] : [s('N_Ed', 'H h_c / (d_v cos θ)', kN(N), 'kN')])];
     add(CHK.pending({ grp, name: 'Knee brace in compression', clause: 'IS 800:2007 7.5', Ed: N, unit: 'kN', fmt: kN, steps: [...demandSteps, s('L_KB', 'a / cos θ', Lkb, 'mm')] }, 'Angle struts (7.5) are pending in the code register.'));
+    if (nL === 2) {
+      // 7.8 (two components back to back): the connections between the two angles; 7.8.4: bolts not less than 16 mm (member <= 10 mm thick), 20 mm (<= 16 mm), 22 mm (> 16 mm). The knee brace has no input for these connections.
+      const dMin = t <= 10 ? 16 : t <= 16 ? 20 : 22;
+      add(CHK.pending({ grp, name: 'Knee brace, two angles back to back: connections between the angles (7.8)', clause: 'IS 800:2007 7.8', Ed: N, unit: 'kN', fmt: kN,
+        steps: [s('t', 'angle thickness', t, 'mm'), s('d_min', '7.8.4: 16 mm (t ≤ 10), 20 mm (t ≤ 16), 22 mm (t > 16)', dMin, 'mm'), s('d', 'bolt diameter entered (end bolts)', d, 'mm')] },
+        (d < dMin ? `The entered bolt diameter (${U.fmt(d, 0)} mm) is below the 7.8.4 minimum (${dMin} mm): if the same bolts connect the two angles together, they do not comply; use at least ${dMin} mm for those connections. ` : '') + 'The connections between the two angles (number, spacing, diameter, packing) are not inputs of the knee brace, so 7.8.1 (slenderness between connections not more than 40 or 0.6 of the strut) and 7.8.2 (at least two bolts at the ends and two intermediate connections) cannot be checked. Nothing was changed automatically.'));
+    }
     // tension: 6.3.3 / 6.3.4 (shear lag, centre-line areas, back-to-back angles = 2 × one angle) and 6.4.1 block shear of the end (one-sided, Fig. 7B); decisions in docs/TECHNICAL_DECISIONS_6.3_6.4.md.
     // Leg b is the connected leg (input label), one bolt line per end, e_2 = bolt line to the toe, so w_1 = b − e_2.
     const kneeGeometry = () => { if (!(e2 > 0 && e2 < b)) throw new Error(`the edge distance e_2 = ${U.fmt(e2, 1)} mm must lie inside the connected leg b = ${U.fmt(b, 1)} mm`); };
