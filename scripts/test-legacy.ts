@@ -91,5 +91,18 @@ ok('gate: a verified provision gives FAIL', c3.status === 'FAIL');
 const p1 = CHK.pending({ grp: 'g', name: 'x', clause: 'IS 801', Ed: 5, unit: 'kN' }, 'needs IS 801');
 ok('pending: demand shown, no resistance, REVIEW', p1.status === 'REVIEW' && p1.Ed === 5 && p1.Rd === undefined && p1.eta === null);
 
+// ---- OI-10 defaults: base-plate f_y (IS 800:2007 Table 1, IS 2062 E 250) and the unused slab_rho
+const bpfy: any = SCHEMA.byId.bp_fy, rho: any = SCHEMA.byId.slab_rho;
+ok('OI-10: base-plate f_y default 250 N/mm² (E 250, t < 20 mm; IS 800 Table 1 has no E 275)', bpfy.def === 250 && /Table 1/.test(bpfy.help) && /240 for 20-40 mm/.test(bpfy.help) && /230 above 40 mm/.test(bpfy.help));
+ok('OI-10: slab_rho help says the input is not used, no "v_min"', /Not used by the current punching check/.test(rho.help) && !/v_min/.test(rho.help));
+const bpCheck = (inp: any) => { const x: any = MODEL.compute(inp), cs: any[] = []; for (const row of x.summary.rows) for (const c of row.list) cs.push(c); return { plate: cs.find((c) => c.name === 'Base plate thickness'), punch: cs.find((c) => c.name === 'Slab punching shear') }; };
+const bp250 = bpCheck(SCHEMA.defaults()), bp275 = bpCheck({ ...SCHEMA.defaults(), bp_fy: 275 }), bp25 = bpCheck({ ...SCHEMA.defaults(), bp_t: 25 });
+ok('OI-10: base-plate thickness stays REVIEW (7.4.3.1 not verified)', bp250.plate?.status === 'REVIEW' && bp25.plate?.status === 'REVIEW');
+ok('OI-10: t_req scales with 1/√f_y (250 vs 275: × √1.1)', Math.abs(bp250.plate.Ed / bp275.plate.Ed - Math.sqrt(1.1)) < 1e-9, `${bp250.plate?.Ed} / ${bp275.plate?.Ed}`);
+ok('OI-10: no thickness-band note for t < 20 mm', !/thickness band/.test(bp250.plate.note || ''));
+ok('OI-10: thickness-band note for t ≥ 20 mm, f_y not reduced', /≥ 20 mm/.test(bp25.plate.note || '') && /not reduced automatically/.test(bp25.plate.note || '') && bp25.plate.Ed === bp250.plate.Ed);
+const pr = bpCheck({ ...SCHEMA.defaults(), slab_rho: 0.015 });
+ok('OI-10: slab_rho does not change the punching check', !!bp250.punch && pr.punch.Rd === bp250.punch.Rd && pr.punch.eta === bp250.punch.eta);
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

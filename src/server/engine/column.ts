@@ -99,7 +99,9 @@ export const COL: any = (() => {
     const P = RES.provider(R);
       const w = N / (a * b), fb = 0.6 * fck, ex = Math.max((a - ch) / 2, (b - cb) / 2), treq = Math.sqrt(2.5 * w * (ex * ex - 0.3 * Math.min((a - ch) / 2, (b - cb) / 2) ** 2) * 1.10 / fyp);
       add(CHK.mk({ grp, name: 'Concrete bearing', clause: 'IS 800:2007 7.4.1 (0.6 f_ck)', Ed: w, Rd: fb, unit: 'N/mm²', fmt: x => x }));
-      add(CHK.mk({ grp, name: 'Base plate thickness', clause: 'IS 800:2007 7.4.3.1 (slab base, t_s = √(2.5 w (a² − 0.3 b²) γ_m0 / f_y))', Ed: treq, Rd: tp, unit: 'mm', fmt: x => x, basis: 'code' }));
+      add(CHK.mk({ grp, name: 'Base plate thickness', clause: 'IS 800:2007 7.4.3.1 (slab base, t_s = √(2.5 w (a² − 0.3 b²) γ_m0 / f_y))', Ed: treq, Rd: tp, unit: 'mm', fmt: x => x, basis: 'code',
+        // IS 800 Table 1 (IS 2062): the minimum yield stress falls for t ≥ 20 mm; the value entered is used as it is, not reduced
+        ...(tp >= 20 ? { note: 'Plate thickness ' + U.fmt(tp, 0) + ' mm ≥ 20 mm: the f_y entered (' + U.fmt(fyp, 0) + ' N/mm²) must be the value for this thickness band (IS 800:2007 Table 1, IS 2062 E 250: 240 for 20-40 mm, 230 above 40 mm); it is not reduced automatically.' } : {}) }));
     if (Math.abs(M) > 1) add(CHK.mk({ grp, name: 'Base plate with moment (fixed base)', clause: 'IS 800:2007 7.4 (not implemented)', review: true, note: 'Design the fixed base for N and M separately.' }));
     // shear at the base and anchors in concrete: the provisions (friction, anchor shear and tension, anchorage in concrete) are not verified in the code register
     const Ff = 0.2 * N;

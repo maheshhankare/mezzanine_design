@@ -159,10 +159,10 @@ export const SCHEMA: any = (() => {
   f('col_spl', 'Column splice', 's', 'none', { opts: [['none', 'None'], ['yes', 'Yes (design by the engineer – flagged)']] });
   gp('Base plate, anchors and slab');
   f('bp_a', 'Base plate length', 'n', 200, { unit: 'mm' }); f('bp_b', 'Base plate width', 'n', 200, { unit: 'mm' }); f('bp_t', 'Base plate thickness', 'n', 12, { unit: 'mm' });
-  f('bp_fy', 'Base plate f_y', 'n', 275, { unit: 'N/mm²' });
+  f('bp_fy', 'Base plate f_y', 'n', 250, { unit: 'N/mm²', help: 'IS 800:2007 Table 1, IS 2062 E 250: 250 for t < 20 mm, 240 for 20-40 mm, 230 above 40 mm. Enter the value for the plate actually supplied.' });
   f('bp_nA', 'Number of anchors', 'n', 4, { min: 0, int: 1 }); f('bp_dA', 'Anchor diameter', 'n', 12, { unit: 'mm' }); f('bp_gA', 'Anchor grade', 's', '8.8', { opts: BOLTS });
   f('fck', 'Concrete f_ck', 'n', 25, { unit: 'N/mm²' }); f('slab_h', 'Slab thickness', 'n', 200, { unit: 'mm' }); f('slab_d', 'Slab effective depth d', 'n', 160, { unit: 'mm' });
-  f('slab_rho', 'Slab tension reinforcement ratio ρ_l', 'n', 0.0, { min: 0, max: 0.02, help: '0 if unreinforced or unknown: punching then uses v_min only.' });
+  f('slab_rho', 'Slab tension reinforcement ratio ρ_l', 'n', 0.0, { min: 0, max: 0.02, help: 'Not used by the current punching check (IS 456:2000 31.6: τ_c = k_s·0.25√f_ck, independent of reinforcement). Kept so saved projects load unchanged.' });
   f('ac1', 'Concrete bearing area ratio A_c1 / A_c0 (1 = plate size)', 'n', 1, { min: 1, max: 9 });
 
   // ---------- 7 Joist beams ----------

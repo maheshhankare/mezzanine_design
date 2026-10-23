@@ -43,9 +43,10 @@ India (IS 800:2007 only). The tool models a **steel box / RHS column on a base p
 | Base plate thickness | IS 800 7.4.3.1 slab base formula (text verified) and the bearing pressure distribution of 7.4.1 | approval; the existing code already uses the printed formula (clause shown as REVIEW because 7.4.3.1 is not yet verified in the register) |
 | Hollow-section wall | no Indian reference found. **A.** design the connection so that the wall is not loaded locally (through-plates, internal stiffeners, solid plug) and state it; **B.** a reference or test data you supply | your decision / document |
 
-## 6. Findings on the current defaults (review, not changed)
-* The base-plate default **f_y = 275 N/mm²** (`bp_fy`) is not an IS 2062 grade value (the plate grades offered elsewhere are E250 / E350); the connection plates default to 250. Review the default.
-* The help text of `slab_rho` still says "punching then uses v_min only", a term of the removed route; the IS 456 punching check does not use it. Wording to be corrected.
+## 6. Findings on the current defaults (OI-10, changed 2026-10-23 with approval)
+* The former base-plate default **f_y = 275 N/mm²** (`bp_fy`) corresponds to grade E 275 of IS 2062:2011 (Table 2: 275 / 265 / 255 N/mm² for t < 20 / 20-40 / > 40 mm), but **IS 800:2007 Table 1 lists no E 275** (its IS 2062 rows are E 165, E 250 A/B/C, E 300, E 350, E 410, E 450). The default is now **250 N/mm²** (E 250, t < 20 mm, as for the connection plates), with help text giving the thickness bands. The base-plate thickness check (7.4.3.1, REVIEW) adds a note when t ≥ 20 mm that the f_y entered must suit the thickness band; it is not reduced automatically. Saved projects keep the value stored with them.
+* The help text of `slab_rho` now states that the input is not used by the current punching check (IS 456:2000 31.6: τ_c = k_s·0.25√f_ck, independent of reinforcement) and is kept so saved projects load unchanged; the former text ("punching then uses v_min only") was a term of the removed route.
+* Not changed (outside OI-10): 7.4.3.1 also requires t_s > t_f; this condition is not checked.
 * The legacy base-plate shear check was reduced to "pending" during the conversion; with μ = 0.45 it could be re-implemented from the verified 7.4.1 text.
 
 ## 7. Documents and decisions I need
