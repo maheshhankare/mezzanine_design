@@ -130,5 +130,36 @@ ok('knee brace: e_2 outside the leg gives two pending checks (rupture and block 
 const kbad2 = knee({ k_nb: 1, k_e1: 5 });
 ok('knee brace: one bolt with an end distance smaller than the hole radius: block shear pending, rupture (not affected) still checked', !kbad2['Knee brace end'] && !!kbad2['Knee brace end (pending)'] && kbad2['Knee brace end (pending)'].status === 'REVIEW' && !!kbad2['Knee brace in tension'] && !kbad2['Knee brace in tension (pending)'], JSON.stringify(Object.keys(kbad2)));
 
+// ---- IS 800:2007 Table 19 (10.2.1, printed p. 73): hole clearances, every row, both columns, the boundaries around 24 and 27 mm, invalid input and the flag below 12 mm
+const T19: [number, number, number][] = [[12, 1, 3], [14, 1, 3], [15, 2, 4], [16, 2, 4], [22, 2, 4], [23, 2, 6], [24, 2, 6], [25, 3, 8], [26, 3, 8], [27, 3, 8], [30, 3, 8]];
+ok('Table 19: standard and over-size clearance for 12, 14, 15, 16, 22, 23, 24, 25, 26, 27, 30 mm', T19.every(([d, st, ov]) => RD.holeClearance(d, 'standard') === st && RD.holeClearance(d, 'oversize') === ov && RD.standardClearance(d) === st), JSON.stringify(T19.map(([d]) => [d, RD.holeClearance(d), RD.holeClearance(d, 'oversize')])));
+ok('Table 19: the jumps are exactly at 14 -> 16 (standard 1 -> 2), 24 -> 25 (standard 2 -> 3, over-size 6 -> 8) and the 22 -> 24 over-size step (4 -> 6)', RD.holeClearance(14) === 1 && RD.holeClearance(16) === 2 && RD.holeClearance(24) === 2 && RD.holeClearance(24.001) === 3 && RD.holeClearance(24, 'oversize') === 6 && RD.holeClearance(22, 'oversize') === 4 && RD.holeClearance(24.001, 'oversize') === 8);
+ok('Table 19: below 12 mm the table gives nothing (null); invalid diameters are refused', RD.holeClearance(11.999) === null && RD.holeClearance(5) === null && [0, -1, NaN, Infinity].every((v) => { try { RD.holeClearance(v); return false; } catch { return true; } }));
+ok('Table 19: hole diameter = d + clearance, and below 12 mm d + 1 (over-size d + 3) is returned WITH the flag', RD.holeDiameter(27).d0 === 30 && !RD.holeDiameter(27).outsideTable && RD.holeDiameter(27, 'oversize').d0 === 35 && RD.holeDiameter(10).d0 === 11 && RD.holeDiameter(10).outsideTable && RD.holeDiameter(10, 'oversize').d0 === 13 && RD.holeDiameter(10, 'oversize').outsideTable && !RD.holeDiameter(12).outsideTable);
+// the engine checks use the table: the hole diameter is backed out of the printed steps of the real checks
+const hd = (o: any) => { const r: any = MODEL.compute({ ...SCHEMA.defaults(), ...o }); const m: any = {}; for (const row of r.summary?.rows || []) for (const c of row.list) m[row.key + '|' + c.name] = c; return { m, r }; };
+const t19step = (c: any, re: RegExp) => { const q = (c?.steps || []).find((x: any) => re.test(x[0])); return q ? q[2] : NaN; };
+const hnet = (o: any) => t19step(hd(o).m['ci|C web net shear along the bolt column (incl. adjustment holes in that line)'], /h_net/);
+const h12 = hnet({ ci_d: 12 }), h12o = hnet({ ci_d: 12, ci_hole: 'oversize' });
+let engOk = true; const engBad: string[] = [];
+for (const d of [12, 14, 16, 20, 24, 25, 27, 30]) {
+  const stdD0 = 13 + (h12 - hnet({ ci_d: d })) / 2, ov = 15 + (h12o - hnet({ ci_d: d, ci_hole: 'oversize' })) / 2; // two bolts in the column; reference hole diameters 13 / 15 at d = 12
+  if (Math.abs(stdD0 - (d + (RD.holeClearance(d) as number))) > 1e-9 || Math.abs(ov - (d + (RD.holeClearance(d, 'oversize') as number))) > 1e-9) { engOk = false; engBad.push(`${d}: ${stdD0} ${ov}`); }
+}
+ok('connections: the hole diameter follows Table 19 (standard and over-size) from 12 to 30 mm', engOk, engBad.join('; '));
+const kneeD0 = (d: number) => { const { m } = hd({ k_use: 'yes', k_nL: '1', k_b: 100, k_h: 100, k_t: 10, k_nb: 3, k_p1: 90, k_e1: 60, k_e2: 50, k_d: d, k_fy: 250, k_fu: 410 }); for (const k of Object.keys(m)) if (/Knee brace in tension: net-section rupture/.test(k)) return (950 - t19step(m[k], /^A_nc/)) / 10; return NaN; };
+ok('knee brace: the hole diameter follows Table 19 (12, 16, 24, 25, 27, 30 mm)', [12, 16, 24, 25, 27, 30].every((d) => Math.abs(kneeD0(d) - (d + (RD.holeClearance(d) as number))) < 1e-9), [12, 16, 24, 25, 27, 30].map(kneeD0).join(','));
+const vbD0 = (d: number) => { const { m, r } = hd({ vb_use: 'yes', br_d: d }); const D: any = SCHEMA.defaults(); for (const k of Object.keys(m)) if (/Vertical bracing diagonal: net-section rupture/.test(k)) return +D.vb_b - t19step(m[k], /^A_n/) / +D.vb_t; return NaN; };
+ok('vertical bracing: the hole diameter follows Table 19 (12, 16, 24, 25, 27, 30 mm)', [12, 16, 24, 25, 27, 30].every((d) => Math.abs(vbD0(d) - (d + (RD.holeClearance(d) as number))) < 1e-9), [12, 16, 24, 25, 27, 30].map(vbD0).join(','));
+const pbKb = (d: number) => { const { m } = hd({ br_use: 'yes', br_d: d }); for (const k of Object.keys(m)) if (/Plan bracing end bolts/.test(k)) return t19step(m[k], /^k_b/); return NaN; };
+ok('plan bracing end bolts: the edge distance follows the hole (e_1 = 2 d_0), so k_b = 2/3 for every diameter (the result does not depend on the hole size)', [12, 16, 24, 27, 30].every((d) => Math.abs(pbKb(d) - 2 / 3) < 1e-9));
+// flag below 12 mm
+const k10 = hd({ k_use: 'yes', k_nL: '1', k_b: 100, k_h: 100, k_t: 10, k_nb: 3, k_p1: 90, k_e1: 60, k_e2: 50, k_d: 10, k_fy: 250, k_fu: 410 }).m;
+const k10note = Object.keys(k10).filter((k) => /Knee brace (in tension: net-section|end: block)/.test(k)).map((k) => k10[k].note || '');
+ok('below 12 mm: the knee-brace checks carry the "outside Table 19" flag and d + 1 is used; at 12 mm and above there is no flag', k10note.length === 2 && k10note.every((n: string) => /outside Table 19/.test(n)) && Math.abs(kneeD0(10) - 11) < 1e-9 && !Object.keys(hd({ k_use: 'yes', k_nL: '1', k_b: 100, k_h: 100, k_t: 10, k_nb: 3, k_p1: 90, k_e1: 60, k_e2: 50, k_d: 12, k_fy: 250, k_fu: 410 }).m).some((k: string) => /outside Table 19/.test(JSON.stringify((hd({ k_use: 'yes', k_d: 12 }) as any).m[k] || {}))));
+const c10 = hd({ ci_d: 10 }).m, c12 = hd({ ci_d: 12 }).m;
+const flagged = (m: any) => Object.keys(m).filter((k) => /^ci\|(Bearing on the (C web|plate|angle leg|U-cleat)|C web net shear along the bolt column)/.test(k) && /outside Table 19/.test(m[k].note || ''));
+ok('below 12 mm: the connection checks that use the hole diameter carry the flag; at 12 mm there is none', flagged(c10).length >= 2 && flagged(c12).length === 0, JSON.stringify(flagged(c10)));
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

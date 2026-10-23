@@ -12,6 +12,7 @@ import { RES } from './resist';
 import * as RD from '../frame/design/restraint';
 import * as RD_IS from '../frame/design/is800';
 import * as TN from '../frame/design/tension';
+const RD_OUT = RD.OUTSIDE_TABLE_19;
 import { designHollowMember } from '../frame/design/member';
 // ===== Surface / decking, joist beams, knee braces and bracing (IS 800:2007) =====
 const NEEDSURF = 'No verified IS 800 provision exists in the code register for this check (timber, cold-formed deck and stability-bracing rules are outside the verified scope): the check is pending.';
@@ -187,7 +188,7 @@ export const RST: any = (() => {
     const Fh = H * hc / dv, N = ga ? ga.Nc : Fh / Math.cos(th) + Ng, Nt = ga ? ga.Nt : Fh / Math.cos(th), Mcol = H * (hc - dv);
     const nL = +I.k_nL, b = +I.k_b, h = +I.k_h, t = +I.k_t, fy = +I.k_fy, fu = +I.k_fu, E = +I.E;
     const A1 = angle(b, h, t), A = nL * A1.A;
-    const d = +I.k_d, d0 = d <= 14 ? d + 1 : d + 2, nb = Math.round(+I.k_nb), e2 = +I.k_e2 > 0 ? +I.k_e2 : b / 2, p1 = +I.k_p1, e1 = +I.k_e1;
+    const d = +I.k_d, hdK = RD.holeDiameter(d), d0 = hdK.d0, nb = Math.round(+I.k_nb), e2 = +I.k_e2 > 0 ? +I.k_e2 : b / 2, p1 = +I.k_p1, e1 = +I.k_e1;
     // angle struts (IS 800 7.5) are not verified in the code register: the compression check is pending, the demand is reported; the tension checks (6.3.3, 6.4.1) are provisional (REVIEW)
     const demandSteps = ga ? [s('N_Ed', 'global frame analysis: ' + ga.case, kN(N), 'kN')] : [s('H', phiTxt + ' × N + H_add', kN(H), 'kN'), ...(Ng ? [s('R_knee', `largest knee reaction of the ${x.grav.where} model (ULS)`, kN(x.grav.R), 'kN'), s('N_grav', 'R_knee / sin θ', kN(Ng), 'kN'), s('N_Ed', 'H h_c / (d_v cos θ) + N_grav', kN(N), 'kN')] : [s('N_Ed', 'H h_c / (d_v cos θ)', kN(N), 'kN')])];
     add(CHK.pending({ grp, name: 'Knee brace in compression', clause: 'IS 800:2007 7.5', Ed: N, unit: 'kN', fmt: kN, steps: [...demandSteps, s('L_KB', 'a / cos θ', Lkb, 'mm')] }, 'Angle struts (7.5) are pending in the code register.'));
@@ -199,7 +200,7 @@ export const RST: any = (() => {
       const Lc = Math.max(0, (nb - 1) * p1), rup = TN.singleAngleRupture({ connected: b, outstanding: h, t, fy, fu, connection: 'bolted', w1: b - e2, nHoles: 1, dh: d0, Lc, nAngles: nL === 2 ? 2 : 1 });
       add(CHK.mk({ grp, name: 'Knee brace in tension: net-section rupture (angle connected by one leg)', clause: rup.clause, Ed: Nt, Rd: rup.Tdn, unit: 'kN', fmt: kN,
         steps: [s('A_nc', '(b − t/2) t − d_0 t (net area of the connected leg)', rup.areas.Anc, 'mm²'), s('A_go', '(h − t/2) t (gross area of the outstanding leg)', rup.areas.Ago, 'mm²'), s('b_s', 'h + w_1 − t, w_1 = b − e_2', rup.bs, 'mm'), s('L_c', '(n_b − 1) p_1', Lc, 'mm'), s('β', rup.betaLimited === 'none' ? '1.4 − 0.076 (w/t)(f_y/f_u)(b_s/L_c)' : 'at its limit: ' + rup.betaLimited, rup.beta), s('T_dn', `0.9 A_nc f_u/γ_m1 + β A_go f_y/γ_m0${nL === 2 ? ', × 2 angles' : ''}`, kN(rup.Tdn), 'kN')],
-        note: 'Centre-line areas, fillets neglected; leg b is the connected leg; one bolt line (one hole in the critical section). IS 800 does not define A_nc and A_go: see the decision record.' }));
+        note: 'Centre-line areas, fillets neglected; leg b is the connected leg; one bolt line (one hole in the critical section). IS 800 does not define A_nc and A_go: see the decision record.' + (hdK.outsideTable ? ' ' + RD_OUT : '') }));
     } catch (err) {
       add(CHK.pending({ grp, name: 'Knee brace in tension: net-section rupture (angle connected by one leg)', clause: 'IS 800:2007 6.3.3', Ed: Nt, unit: 'kN', fmt: kN }, 'The connection geometry does not allow the check: ' + err.message));
     }
@@ -208,7 +209,7 @@ export const RST: any = (() => {
       const ga2 = TN.blockShearAreas({ kind: 'one-sided', t, nAlong: nb, e1, p1: nb > 1 ? p1 : 0, nAcross: 1, g: 0, e2, d0 }), bk = TN.blockShear({ ...ga2, fy, fu });
       add(CHK.mk({ grp, name: 'Knee brace end: block shear (angle leg tearing out)', clause: bk.clause, Ed: Nt, Rd: bk.Tdb * nL, unit: 'kN', fmt: kN,
         steps: [s('L_v', 'e_1 + (n_b − 1) p_1', ga2.Lv, 'mm'), s('L_t', 'e_2 (hole centre to the toe)', ga2.Lt, 'mm'), s('T_1', 'A_vg f_y/(√3 γ_m0) + 0.9 A_tn f_u/γ_m1', kN(bk.T1), 'kN'), s('T_2', '0.9 A_vn f_u/(√3 γ_m1) + A_tg f_y/γ_m0', kN(bk.T2), 'kN'), s('T_db', `min(T_1, T_2)${nL === 2 ? ' per angle, × 2' : ''}`, kN(bk.Tdb * nL), 'kN')],
-        note: 'One shear plane and one tension plane (Fig. 7B); shear length to the centre of the last hole, half-hole deduction at the end of each line.' }));
+        note: 'One shear plane and one tension plane (Fig. 7B); shear length to the centre of the last hole, half-hole deduction at the end of each line.' + (hdK.outsideTable ? ' ' + RD_OUT : '') }));
     } catch (err) {
       add(CHK.pending({ grp, name: 'Knee brace end: block shear (angle leg tearing out)', clause: 'IS 800:2007 6.4.1', Ed: Nt, unit: 'kN', fmt: kN }, 'The connection geometry does not allow the check: ' + err.message));
     }
@@ -225,7 +226,7 @@ export const RST: any = (() => {
     const { R, I, sumNf, nRestr, Lline, Htot, Lmb, Lsb, hc } = x, checks = [], add = c => { checks.push(c); return c; }, grp = 'Bracing', ga = x.ga || null;
     const P = RES.provider(R), g0 = 1.1;
     const memRes = (b, t, typ) => {
-      const fy = +I.br_fy, fu = +I.br_fu, d = +I.br_d, d0 = d <= 14 ? d + 1 : d + 2;
+      const fy = +I.br_fy, fu = +I.br_fu, d = +I.br_d, d0 = RD.holeDiameter(d).d0;
       let A, Anet;
       if (typ === 'rod') { A = MEM.boltAs(b) || Math.PI * b * b / 4 * 0.78; Anet = A; }
       else if (typ === 'angle') { A = angle(b, b, t).A; Anet = A - d0 * t; }
@@ -243,8 +244,8 @@ export const RST: any = (() => {
       add(CHK.pending({ grp, name: 'Plan bracing diagonal (tension)', clause: 'IS 800:2007 6.2', Ed: Fpl, unit: 'kN', fmt: kN,
         steps: [s('Σ N_Ed', 'compression-flange forces restrained by one bracing', kN(sumNf), 'kN'), s('m', 'restrained members', m), s('e_0', 'α_m L/500', e0, 'mm'), s('q_d', '', qd, 'N/mm'), s('F_diag', ga ? `V L_d / L_sb + ${U.fmt(ga.Fplan / 1e3, 2)} kN transferred between the frame lines (global analysis)` : 'V L_d / L_sb', kN(Fpl), 'kN'), ...r.steps],
         note: 'The stabilising force of the compression flanges (an assumed initial bow L/500 and the number of restrained members) came from the removed design route and is shown for information only; IS 800 has no verified rule for it, so the bracing member is not checked.' }, 'No verified IS 800 rule for the force in a stability bracing of compression flanges.'));
-            const bs = P.boltShear(+I.br_d, I.br_bg, 1, true), bb = P.bearingPlate(+I.br_d, +I.br_d + 1, +I.br_t, +I.br_fu, I.br_bg, 2 * (+I.br_d + 1), (+I.br_b) / 2, 0, 0);
-      add(CHK.mk({ grp, name: 'Plan bracing end bolts', clause: bs.clause, Ed: Fpl / Math.round(+I.br_nb), Rd: Math.min(bs.Rd, bb.Rd), unit: 'kN', fmt: kN, steps: [...bs.steps, ...bb.steps] }));
+            const bs = P.boltShear(+I.br_d, I.br_bg, 1, true), d0pb = RD.holeDiameter(+I.br_d).d0, bb = P.bearingPlate(+I.br_d, d0pb, +I.br_t, +I.br_fu, I.br_bg, 2 * d0pb, (+I.br_b) / 2, 0, 0);
+      add(CHK.mk({ grp, name: 'Plan bracing end bolts', clause: bs.clause, Ed: Fpl / Math.round(+I.br_nb), Rd: Math.min(bs.Rd, bb.Rd), unit: 'kN', fmt: kN, steps: [...bs.steps, ...bb.steps], note: RD.holeDiameter(+I.br_d).outsideTable ? RD_OUT : '' }));
     } else add(CHK.na({ grp, name: 'Plan bracing', clause: '' }, 'No plan bracing: main-beam restraints through SB-Int lines must be anchored otherwise (wall / diaphragm).'));
     let Fv = 0;
     if (I.vb_use === 'yes') {
@@ -253,7 +254,7 @@ export const RST: any = (() => {
       add(CHK.mk({ grp, name: 'Vertical bracing diagonal (tension only)', clause: 'IS 800:2007 4.3.6, 6.2', Ed: Fv, Rd: r.Rd, unit: 'kN', fmt: kN, steps: [...(ga && ga.Fv !== null ? [s('F', 'tension diagonal, global frame analysis: ' + ga.FvCase, kN(Fv), 'kN')] : [s('H', 'notional + additional, per braced line', kN(Htot), 'kN'), s('F', 'H L_d / L', kN(Fv), 'kN')]), ...r.steps], note: 'Yielding of the gross section only: the rupture of the net section is the separate check below.' }));
       const nr = P.netRupture(r.Anet, +I.br_fu);
       add(CHK.mk({ grp, name: 'Vertical bracing diagonal: net-section rupture (6.3.1)', clause: nr.clause, Ed: Fv, Rd: nr.Rd, unit: 'kN', fmt: kN, steps: [s('A_n', '(b − d_0) t: one hole in the critical section', r.Anet, 'mm²'), ...nr.steps],
-        note: 'Assumes ONE bolt hole in the critical section (a single bolt line across the flat) with the bolt of the bracing connection; a staggered or multi-line pattern needs the net area of 6.3.1 for each path. Block shear (6.4) of the end connection is not checked: the bolt pattern (pitch, end distances) is not an input of the vertical bracing.' }));
+        note: 'Assumes ONE bolt hole in the critical section (a single bolt line across the flat) with the bolt of the bracing connection; a staggered or multi-line pattern needs the net area of 6.3.1 for each path. Block shear (6.4) of the end connection is not checked: the bolt pattern (pitch, end distances) is not an input of the vertical bracing.' + (RD.holeDiameter(+I.br_d).outsideTable ? ' ' + RD_OUT : '') }));
       add(CHK.pending({ grp, name: 'Vertical bracing diagonal end: block shear', clause: 'IS 800:2007 6.4.1', Ed: Fv, unit: 'kN', fmt: kN }, 'Block shear needs the bolt pattern (pitch, end and edge distances) of the bracing end, which is not an input of the vertical bracing; no value is assumed.'));
     } else add(CHK.na({ grp, name: 'Vertical bracing', clause: '' }, 'No vertical bracing: frame stability from knee braces / column bending.'));
     return { checks, qd, Fpl, Fv };

@@ -35,14 +35,29 @@ export function restraintDemand(p: { Fcf: number; n: number }): RestraintDemand 
 }
 
 // ---------------------------------------------------------------------------------------------------------- 10.2 geometry
-/** Table 19: standard clearance of a hole [mm]; the table starts at d = 12 mm (smaller bolts: not covered, null). */
-export function standardClearance(d: number): number | null {
+export type HoleKind = 'standard' | 'oversize';
+/**
+ * IS 800:2007 Table 19 (clause 10.2.1, printed p. 73): clearance in diameter [mm] of a standard or over-size round hole by the nominal size of the fastener.
+ * 12-14 mm: 1.0 / 3.0; 16-22 mm: 2.0 / 4.0; 24 mm: 2.0 / 6.0; larger than 24 mm: 3.0 / 8.0. The table starts at 12 mm: smaller bolts are not covered (null).
+ * Sizes the table does not list (15, 23 mm: not standard bolts) take the row of the next listed size.
+ */
+export function holeClearance(d: number, kind: HoleKind = 'standard'): number | null {
+  if (!(d > 0) || !Number.isFinite(d)) throw new Error('IS 800 10.2.1: the bolt diameter must be a positive number');
   if (d < 12) return null;
-  if (d <= 14) return 1.0;
-  if (d <= 22) return 2.0;
-  if (d <= 24) return 2.0;
-  return 3.0;
+  const row = d <= 14 ? [1, 3] : d <= 22 ? [2, 4] : d <= 24 ? [2, 6] : [3, 8];
+  return kind === 'standard' ? row[0] : row[1];
 }
+/** Table 19: standard clearance of a hole [mm]; the table starts at d = 12 mm (smaller bolts: not covered, null). */
+export function standardClearance(d: number): number | null { return holeClearance(d, 'standard'); }
+/**
+ * Hole diameter for the engine checks. Below 12 mm Table 19 gives nothing: the previous assumption is kept and FLAGGED (`outsideTable`):
+ * standard hole d + 1, over-size hole d + 3. The caller shows the flag with the check.
+ */
+export function holeDiameter(d: number, kind: HoleKind = 'standard'): { d0: number; outsideTable: boolean } {
+  const c = holeClearance(d, kind);
+  return c === null ? { d0: d + (kind === 'standard' ? 1 : 3), outsideTable: true } : { d0: d + c, outsideTable: false };
+}
+export const OUTSIDE_TABLE_19 = 'The bolt diameter is below 12 mm, outside Table 19 of IS 800:2007 (clause 10.2.1): the hole diameter d + 1 (over-size d + 3) is an assumption, not a code value.';
 
 export interface BoltGeometryCheck { ok: boolean; messages: string[]; d0: number | null }
 /** 10.2.2 minimum pitch 2.5 d; 10.2.4.2 minimum end / edge distance 1.7 d_0 (sheared or hand-flame cut edges) or 1.5 d_0 (rolled, machine-flame cut, sawn, planed). */

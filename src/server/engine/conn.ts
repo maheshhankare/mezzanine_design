@@ -5,6 +5,7 @@ import "server-only";
 import { U } from '@/shared/util';
 import { CHK } from '@/shared/check';
 import { MEM } from './member';
+import { holeDiameter, OUTSIDE_TABLE_19 } from '../frame/design/restraint';
 // ===== Connection engine: C-type (fin), U-type (U-cleat), angle cleat, end plate, welded, bolted-and-welded =====
 // Coordinates on the supported C web: z from the top of the C (down +), y from the C end (away from the support +).
 export const CONN: any = (() => {
@@ -17,7 +18,8 @@ export const CONN: any = (() => {
     welded: { name: 'Welded (C web fillet-welded to a plate welded to the support)', cBolts: false, sBolts: false, plate: true, weldSup: true, weldC: true, planes: 1 },
     boltweld: { name: 'Bolted-and-welded (cleat welded to the C web, bolted to the support)', cBolts: false, sBolts: true, plate: true, weldSup: false, weldC: true, planes: 1 }
   };
-  const d0auto = (d, hole) => (hole === 'oversize' ? (d <= 14 ? d + 3 : d + 4) : d <= 14 ? d + 1 : d + 2);
+  // IS 800:2007 Table 19 (10.2.1): standard or over-size clearance by bolt size; below 12 mm the table gives nothing (d + 1 / d + 3 assumed and flagged)
+  const d0auto = (d, hole) => holeDiameter(d, hole === 'oversize' ? 'oversize' : 'standard').d0;
 
   function design(x) {
     const { R, P, c, mem, sup } = x; // c = connection inputs (prefix removed)
@@ -25,6 +27,7 @@ export const CONN: any = (() => {
     const grp = x.title;
     const p = mem.p, t = p.t, H = p.H, nWebs = mem.arr === 'single' ? 1 : 2, tWeb = nWebs * t; // bearing thickness of the supported web(s)
     const d = +c.d, d0 = c.d0 > 0 ? +c.d0 : d0auto(d, c.hole), dw = c.wsh === 'std' ? 2 * d + 0 : 1.6 * d; // washer OD ≈ 2d, else head ≈ 1.6 d
+    const t19 = !(c.d0 > 0) && holeDiameter(d, c.hole === 'oversize' ? 'oversize' : 'standard').outsideTable ? ' ' + OUTSIDE_TABLE_19 : ''; // flag shown on the checks that use the hole diameter
     const nv = Math.round(c.nv), nh = T.cBolts ? Math.round(c.nh) : 0, nb = nv * nh;
     const zs = U.range(nv, i => +c.z1 + i * c.p1), ys = U.range(Math.max(nh, 1), j => +c.es + j * c.p2);
     const zg = (zs[0] + zs[zs.length - 1]) / 2, yg = (ys[0] + ys[ys.length - 1]) / 2;
@@ -94,15 +97,15 @@ export const CONN: any = (() => {
       const eC1 = +c.es, eC2 = Math.min(zs[0], H - zs[zs.length - 1]) - flat0;
       const b1 = thin ? P.bearingThin(d, d0, tWeb > t && nWebs > 1 ? t : t, fu, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0) : P.bearingPlate(d, d0, t, fu, c.bg, eC1, eC2, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0, c.hole);
       const bRdC = b1.Rd * nWebs;
-      add(CHK.mk({ grp, name: `Bearing on the C web${nWebs > 1 ? 's (' + nWebs + ' webs)' : ''}`, clause: b1.clause, Ed: Fb, Rd: bRdC, unit: 'kN', fmt: kN, steps: [s('e_1 (to the C end)', '', eC1, 'mm'), s('e_2 (to the flange corner)', '', eC2, 'mm'), ...b1.steps], basis: b1.basis || 'code', note: b1.note || '', eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearC, fix: fix.bearC }));
+      add(CHK.mk({ grp, name: `Bearing on the C web${nWebs > 1 ? 's (' + nWebs + ' webs)' : ''}`, clause: b1.clause, Ed: Fb, Rd: bRdC, unit: 'kN', fmt: kN, steps: [s('e_1 (to the C end)', '', eC1, 'mm'), s('e_2 (to the flange corner)', '', eC2, 'mm'), ...b1.steps], basis: b1.basis || 'code', note: (b1.note || '') + t19, eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearC, fix: fix.bearC }));
       // bearing on plate / legs
       const legs = c.type === 'ucleat' ? 2 : 1, eP1 = Math.min(eP1t, eP1b, eP2), eP2b = Math.min(eP1t, eP2);
       const bp1 = P.bearingPlate(d, d0, tp, pfu, c.bg, eP1, eP2b, nv > 1 ? +c.p1 : 0, nh > 1 ? +c.p2 : 0, c.hole);
-      add(CHK.mk({ grp, name: `Bearing on the ${c.type === 'ucleat' ? 'U-cleat legs (V/2 each)' : c.type === 'angle' ? 'angle leg' : 'plate'}`, clause: bp1.clause, Ed: Fb / legs, Rd: bp1.Rd, unit: 'kN', fmt: kN, steps: [s('e (min edge)', '', eP1, 'mm'), ...bp1.steps], eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearP, fix: fix.bearP }));
+      add(CHK.mk({ grp, name: `Bearing on the ${c.type === 'ucleat' ? 'U-cleat legs (V/2 each)' : c.type === 'angle' ? 'angle leg' : 'plate'}`, clause: bp1.clause, Ed: Fb / legs, Rd: bp1.Rd, unit: 'kN', fmt: kN, note: t19.trim(), steps: [s('e (min edge)', '', eP1, 'mm'), ...bp1.steps], eq: 'F_b,Ed ≤ F_b,Rd', why: why.bearP, fix: fix.bearP }));
       // net shear of the C web along the bolt column (with adjustment holes in the same line)
       const hNet = (H - 2 * t) - nv * d0 - adj.inBoltLine * adj.dv;
       const sr = P.shearRupture(hNet * t * nWebs, fu);
-      add(CHK.mk({ grp, name: 'C web net shear along the bolt column (incl. adjustment holes in that line)', clause: sr.clause, Ed: V, Rd: sr.Rd, unit: 'kN', fmt: kN, basis: sr.basis || 'code', steps: [s('h_net', `(H − 2t) − ${nv} d_0${adj.inBoltLine ? ` − ${adj.inBoltLine} adjustment holes` : ''}`, hNet, 'mm'), ...sr.steps], why: why.net, fix: fix.net }));
+      add(CHK.mk({ grp, name: 'C web net shear along the bolt column (incl. adjustment holes in that line)', clause: sr.clause, Ed: V, Rd: sr.Rd, unit: 'kN', fmt: kN, basis: sr.basis || 'code', note: t19.trim(), steps: [s('h_net', `(H − 2t) − ${nv} d_0${adj.inBoltLine ? ` − ${adj.inBoltLine} adjustment holes` : ''}`, hNet, 'mm'), ...sr.steps], why: why.net, fix: fix.net }));
       if (adj.n > 0 && !adj.inBoltLine) {
         const h2 = (H - 2 * t) - adj.n * adj.dv, sr2 = P.shearRupture(h2 * t * nWebs, fu);
         add(CHK.mk({ grp, name: 'C web net shear along the adjustment-hole line', clause: sr2.clause, Ed: V, Rd: sr2.Rd, unit: 'kN', fmt: kN, basis: sr2.basis || 'code', steps: [s('h_net', `(H − 2t) − ${adj.n} × ${U.fmt(adj.dv, 1)}`, h2, 'mm'), ...sr2.steps] }));

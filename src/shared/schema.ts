@@ -123,7 +123,7 @@ export const SCHEMA: any = (() => {
     f(c + 'z1', 'First bolt below the top of the C', 'n', d.z1, { unit: 'mm', min: 5 }); f(c + 'es', 'First bolt column from the C end e_s', 'n', d.es, { unit: 'mm', min: 5 });
     f(c + 'd', 'Bolt diameter d', 'n', d.d, { unit: 'mm', min: 5, max: 30 }); f(c + 'bg', 'Bolt grade', 's', '8.8', { opts: BOLTS });
     f(c + 'thr', 'Shear plane through the thread', 'b', 'yes');
-    f(c + 'd0', 'Hole diameter d_0 (blank = d + 1 up to M14, d + 2 above)', 'n', '', { unit: 'mm', opt: 1 });
+    f(c + 'd0', 'Hole diameter d_0 (blank = d + Table 19 clearance: 1 mm to M14, 2 mm to M24, 3 mm above; over-size 3 / 4 / 6 / 8 mm; below M12 d + 1 assumed)', 'n', '', { unit: 'mm', opt: 1 });
     f(c + 'hole', 'Hole type', 's', 'normal', { opts: [['normal', 'Normal round'], ['oversize', 'Oversize round'], ['slotV', 'Short slot, vertical (adjustment)']] });
     f(c + 'wsh', 'Washers under head and nut', 's', 'std', { opts: [['std', 'Standard washers'], ['none', 'None']] });
     f(c + 'a', 'Weld throat a (plate / cleat to support or to the C)', 'n', d.a, { unit: 'mm', min: 0 }); f(c + 'Lw', 'Weld length per line (blank = plate depth)', 'n', '', { unit: 'mm', opt: 1 });
