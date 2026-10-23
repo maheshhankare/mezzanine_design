@@ -22,6 +22,7 @@
     "test:tension": "tsx scripts/test-tension.ts",
     "test:auth": "tsx scripts/test-auth-jose.ts",
     "test:upload": "tsx --conditions=react-server scripts/test-upload-limit.ts",
+    "test:routes": "tsx --conditions=react-server scripts/test-routes-local.ts",
     "test:legacy": "tsx --conditions=react-server scripts/test-legacy.ts",
     "test:pdf": "tsx --conditions=react-server scripts/test-pdf.ts",
     "db:cleanup-test": "tsx scripts/cleanup-test-data.ts"
