@@ -2,8 +2,9 @@
 import { readFileSync } from 'node:fs';
 import { FrameModel, FMember, LoadCase, MemberLoad } from '../../src/server/frame/types';
 
-const dir = process.env.BENCH ?? 'benchmarks/rstab-3x5';
-const read = <T>(f: string): T => JSON.parse(readFileSync(`${dir}/${f}.json`, 'utf8'));
+// The folder is read at each call, not when this file is loaded: project.ts and the studies set BENCH after their imports.
+const dir = () => process.env.BENCH ?? 'benchmarks/rstab-3x5';
+const read = <T>(f: string): T => JSON.parse(readFileSync(`${dir()}/${f}.json`, 'utf8'));
 export interface RNode { id: number; x: number; y: number; z: number }
 export interface RMember { id: number; type: 'beam' | 'truss' | 'null'; n1: number; n2: number; beta: number; sec1: number; sec2: number; hinge1: number; hinge2: number; ecc: number; div: number; length: number; dir: string }
 

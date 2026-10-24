@@ -1,9 +1,12 @@
 // Workflow integration: project -> settings -> validation -> solver -> results -> IS 800 design -> calculation record -> report, with an in-memory store.   npm run test:integration
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MemoryFrameStore } from '../src/server/frameStore';
 import { createFrameProject, saveFrameProject, readFrameProject, runStoredProject, listRunsWithStatus, readRun, parseProject, ServiceError } from '../src/server/frameService';
 import { frameReportPdf } from '../src/server/frameReport';
 import { buildBenchmarkProject } from './rstab/project';
+import { buildModel } from './rstab/build-model';
 import { modelFingerprint } from '../src/server/frame/run';
 import { SETTINGS_VERSION } from '../src/shared/analysisSettings';
 
@@ -15,6 +18,23 @@ const rejects = async (name: string, f: () => Promise<unknown>, status?: number)
   const store = new MemoryFrameStore();
   const U = 'user-1', OTHER = 'user-2';
   const base = buildBenchmarkProject({ design: false });
+
+  // the benchmark folder: project.ts selects the Detail 2 model (rstab-3x5-v2) after its imports; build-model.ts must honour a folder set
+  // after it was loaded (it used to fix the folder at load time and silently read rstab-3x5)
+  ok('benchmark: the project builder selects the Detail 2 model folder', process.env.BENCH === 'benchmarks/rstab-3x5-v2');
+  {
+    const tmp = mkdtempSync(join(tmpdir(), 'mz-bench-'));
+    writeFileSync(join(tmp, 'nodes.json'), JSON.stringify([{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 0, y: 0, z: 3000 }]));
+    writeFileSync(join(tmp, 'members.json'), JSON.stringify([{ id: 1, type: 'beam', n1: 1, n2: 2, beta: 0, sec1: 1, sec2: 1, hinge1: 0, hinge2: 0, ecc: 0, div: 0, length: 3000, dir: 'Z' }]));
+    writeFileSync(join(tmp, 'supports.json'), JSON.stringify([1]));
+    const saved = process.env.BENCH;
+    process.env.BENCH = tmp;
+    try {
+      const { model } = buildModel({ divColumn: 1, divBeam: 1 });
+      ok('benchmark: build-model reads the folder set after it was loaded', model.nodes.length === 2 && model.members.length === 1 && model.supports.length === 1, `${model.nodes.length} nodes`);
+    } finally { process.env.BENCH = saved; rmSync(tmp, { recursive: true, force: true }); }
+    ok('benchmark: the full model is read again after restoring the folder', buildModel({ divColumn: 1, divBeam: 1 }).model.members.length === base.frame.members.length);
+  }
 
   // creation and persistence of settings
   const c = await createFrameProject(store, U, base);
