@@ -7,7 +7,7 @@
 // No real database, account, credential or saved project is used.   npm run test:routes
 import { registerHooks } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -23,7 +23,7 @@ writeFileSync(STUB_DB, `exports.q = (t, p) => globalThis.__routeTestDb.q(t, p ||
 exports.q1 = async (t, p) => (await globalThis.__routeTestDb.q(t, p || []))[0] ?? null;
 exports.tx = async () => { throw new Error('tx is not used by these routes'); };
 `);
-writeFileSync(STUB_HEADERS, `exports.cookies = async () => ({ get: (n) => (n === 'mz_session' && globalThis.__routeTestCookie !== undefined ? { name: n, value: globalThis.__routeTestCookie } : undefined), set() {}, delete() {} });
+writeFileSync(STUB_HEADERS, `exports.cookies = async () => ({ get: (n) => (n === 'mz_session' && globalThis.__routeTestCookie !== undefined ? { name: n, value: globalThis.__routeTestCookie } : undefined), set(name, value) { globalThis.__routeTestSetCookie = { name, value }; }, delete() {} });
 exports.headers = async () => new Headers();
 `);
 process.on('exit', () => rmSync(stubDir, { recursive: true, force: true }));
@@ -86,13 +86,16 @@ const bytes = (s: string) => new TextEncoder().encode(s).length;
   const runGet = await import('../src/app/api/frame/runs/[id]/route');
   const report = await import('../src/app/api/frame/runs/[id]/report/route');
   const { apiUpload, api } = await import('../src/lib/api');
+  const session = await import('../src/server/auth/session');
+  const guard = await import('../src/server/dbGuard');
   const { buildBenchmarkProject } = await import('./rstab/project');
   const MAX = L.FRAME_UPLOAD_MAX_BYTES;
 
   // two test users (no real account); the session token is signed exactly as at login, with the temporary secret
   const mkUser = (email: string) => { const u = { id: randomUUID(), email, name: email.split('@')[0], role: 'user', active: true, token_version: 1 }; db.users.set(u.id, u); return u; };
   const A = mkUser('route-test-a@example.test'), B = mkUser('route-test-b@example.test');
-  const token = (u: any) => new SignJWT({ tv: u.token_version }).setProtectedHeader({ alg: 'HS256' }).setSubject(u.id).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(process.env.AUTH_SECRET!));
+  // the session token of this deployment: VERCEL_ENV is not set here, so the deployment is 'local' (as issueSession signs it)
+  const token = (u: any, claims: Record<string, unknown> = { env: 'local' }) => new SignJWT({ tv: u.token_version, ...claims }).setProtectedHeader({ alg: 'HS256' }).setSubject(u.id).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(process.env.AUTH_SECRET!));
   const tokA = await token(A), tokB = await token(B);
   const as = (t: string | undefined) => { (globalThis as any).__routeTestCookie = t; };
 
@@ -179,9 +182,42 @@ const bytes = (s: string) => new TextEncoder().encode(s).length;
   db.failNext = 'connect ECONNREFUSED'; db.failOn = /^select \* from frame_projects/;
   const dbDown = await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid });
   ok('database failure while reading the project (simulated): 503 with the database message, not a size message', dbDown.status === 503 && /database is not reachable/.test(dbDown.json?.error) && !/MB|large/.test(dbDown.json?.error), JSON.stringify(dbDown.json));
-  // existing behaviour, recorded (not changed): a database failure during the session check is treated as "not signed in" (currentUser catches every error)
+  // a database failure during the session check of an API route: 503 with the database message (was 401 "Not signed in" before)
   db.failNext = 'connect ECONNREFUSED'; db.failOn = /from users where id/;
-  ok('database failure during the session check (simulated): 401 "Not signed in" (existing behaviour, recorded)', (await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid })).status === 401);
+  const sessDown = await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid });
+  ok('database failure during the session check (simulated): 503 "database is not reachable", not "Not signed in"', sessDown.status === 503 && /database is not reachable/.test(sessDown.json?.error), JSON.stringify(sessDown.json));
+  // pages keep sending the visitor to the sign-in page when the database fails (no raw error page)
+  db.failNext = 'connect ECONNREFUSED'; db.failOn = /from users where id/;
+  ok('page session check during a database failure: no user (the page redirects to sign-in, unchanged)', (await session.currentUser()) === null);
+  ok('API session check without a database failure still works', (await session.currentUser({ dbErrors: 'throw' }))?.id === A.id);
+
+  // ---- sessions are bound to their deployment (VERCEL_ENV; 'local' here)
+  ok('session: deployment of this process is "local"', session.sessionEnv() === 'local');
+  as(await token(A, { env: 'preview' }));
+  ok('session: a token of another deployment ("preview") is refused (401)', (await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid })).status === 401);
+  as(await token(A, {}));
+  ok('session: a token without a deployment (issued before this change) is refused (401)', (await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid })).status === 401);
+  as(tokA);
+  ok('session: a token of this deployment is accepted (200)', (await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid })).status === 200);
+  (globalThis as any).__routeTestSetCookie = undefined;
+  await session.issueSession({ id: A.id, token_version: 1 });
+  const issued = (globalThis as any).__routeTestSetCookie;
+  const claims = issued && JSON.parse(Buffer.from(issued.value.split('.')[1], 'base64url').toString('utf8'));
+  ok('session: sign-in issues a token stamped with this deployment ("local")', issued?.name === 'mz_session' && claims?.env === 'local' && claims?.sub === A.id && claims?.tv === 1, JSON.stringify(claims));
+  as(issued.value);
+  ok('session: the token issued at sign-in is accepted', (await call(project.GET, 'GET', `/api/frame/projects/${pid}`, { id: pid })).status === 200);
+  as(tokA);
+
+  // ---- database host pin (EXPECTED_DATABASE_HOST), the pure check used by src/server/db.ts
+  const P = guard.databaseUrlProblem, U = 'postgres://u:p@db.example.test:5432/app';
+  ok('db pin: locally without EXPECTED_DATABASE_HOST the address is used (unchanged)', P(U, {}) === null);
+  ok('db pin: on Vercel without EXPECTED_DATABASE_HOST the connection is refused', P(U, { VERCEL_ENV: 'preview' }) === 'EXPECTED_DATABASE_HOST is not configured for this preview deployment');
+  ok('db pin: matching host accepted (case-insensitive)', P(U, { VERCEL_ENV: 'preview', EXPECTED_DATABASE_HOST: 'DB.example.test' }) === null);
+  ok('db pin: another host refused', P('postgres://u:p@shared.example.test/app', { VERCEL_ENV: 'preview', EXPECTED_DATABASE_HOST: 'db.example.test' }) === 'DATABASE_URL does not point to EXPECTED_DATABASE_HOST');
+  ok('db pin: a host= option in the address refused', P(U + '?host=shared.example.test', { EXPECTED_DATABASE_HOST: 'db.example.test' }) === 'DATABASE_URL contains a host option');
+  ok('db pin: missing DATABASE_URL refused', P(undefined, {}) === 'DATABASE_URL is not configured');
+  ok('db pin: the reasons never contain the address or the password', ![P(U, { VERCEL_ENV: 'production' }), P('postgres://u:secretpw@x.test/a', { EXPECTED_DATABASE_HOST: 'y.test' }), P('not a url', { EXPECTED_DATABASE_HOST: 'y.test' })].some((r) => /secretpw|x\.test|u:p/.test(r || '')));
+  ok('db pin: src/server/db.ts refuses to connect when the check fails', /const problem = databaseUrlProblem\(url \|\| undefined\);\s*if \(problem\) throw/.test(readFileSync('src/server/db.ts', 'utf8')));
   const bad = await call(project.PUT, 'PUT', `/api/frame/projects/${pid}`, { id: pid }, JSON.stringify({ project: g0.json.project }));
   ok('save without a revision: 422 with its own message, not a size message', bad.status === 422 && /revision/.test(bad.json?.error) && !/MB/.test(bad.json?.error), JSON.stringify(bad.json));
   ok('invalid JSON: 400', (await call(projects.POST, 'POST', '/api/frame/projects', {}, '{"project": ')).status === 400);

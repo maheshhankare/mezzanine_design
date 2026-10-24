@@ -2,6 +2,27 @@
 
 **Nothing in this document has been approved.** Merging to `main`, production deployment, a Vercel region change, any change to the deployment-protection bypass token, and any deletion or modification of production data each need separate, explicit written approval.
 
+## Security review 2026-10-24 (local only; no external system accessed, no secret printed)
+**Exposure scan** (pattern scan reporting locations only; a control with made-up secrets was detected, placeholders were ignored):
+* Tracked files at HEAD and the **whole Git history** (all branches): no database password, connection string with a password, `AUTH_SECRET` value, password hash or session token; no `.env` file was ever committed.
+* `review-pack/`, `.next/`, other untracked files, and the local test folder `C:\mz-localtest` (whose `local.env` / `superuser.env` hold throw-away TEST values by design): none.
+* Claude Code conversation records on this PC (23-24 Oct): none (two hits were quotations of `.env.example` with empty values).
+* Not verifiable locally: an earlier note says the Neon password was pasted into a chat on 20 Oct (that record is no longer on this PC). **Rotate the Neon password** (needs approval; Neon + `.env.local` + Vercel Production together).
+
+**Configuration risk:** the Vercel **Preview** variables `DATABASE_URL` and `AUTH_SECRET` were copied from `.env.local` (configuration change 1 below): a preview would use the **shared database and the same secret**. If the GitHub repository is connected to Vercel, a push builds a preview automatically. Fix the Preview variables **before** pushing.
+
+**Bypass token:** exists only in the Vercel project settings (no copy on this PC). Not needed for normal use or for a browser-based preview test; recommendation: revoke it, create a new one only for an automated test and revoke it afterwards.
+
+**Older client-side engine:** `index.html` (736 KB, commit `423bbcb`, removed in `36123f5` on 20 Oct) contains the complete engine as browser code and stays in the history of all four GitHub branches. No user-data or secret risk; an intellectual-property risk only for people with repository access (the current server-side engine is in the repository anyway). The repository answers 404 to anonymous requests (private); it was public on 20 Oct, so copies or public forks made then cannot be withdrawn. Recommendation: keep it private, check forks and collaborators in GitHub; do not rewrite the history.
+
+**Protections added in code (local, not deployed):**
+1. **Sessions bound to their deployment:** the session token carries the deployment (`VERCEL_ENV`: production / preview / development; `local` elsewhere) and is refused by any other deployment, even if both were given the same `AUTH_SECRET`. Tokens issued before this change are refused once (everyone signs in again after deployment).
+2. **Database host pin:** new setting `EXPECTED_DATABASE_HOST` (the host part of `DATABASE_URL`). On Vercel it is **required**: without it, or with a `DATABASE_URL` pointing elsewhere (or containing a `host=` option), the app refuses to connect. Locally it is optional. **Set it in Vercel for Preview and Production before deploying this branch.**
+3. **Database failure during the session check:** API routes answer 503 "The database is not reachable" instead of 401 "Not signed in"; pages still send the visitor to the sign-in page.
+Tests: `npm run test:routes` (16 new checks).
+
+**Checklist before a protected preview** (each external step needs written approval): G1 check repository visibility, forks, collaborators; V1 check whether pushes create previews automatically; N1 new **empty** Neon test database (not a branch of the shared one), migrated, one `@example.test` administrator; V2 Preview `DATABASE_URL`, `EXPECTED_DATABASE_HOST` and a **new** `AUTH_SECRET`; V3 revoke the bypass token; then push; V4 protected preview test (4.5 MB request refusal, response sizes, 300 s run limit, sign-in, record, PDF); N2 rotate the Neon password (Production `DATABASE_URL` and `EXPECTED_DATABASE_HOST` updated together).
+
 ## Test results (branch `feature/second-order-fem`, commit `467ceeb`)
 
 | Check | Result |

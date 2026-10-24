@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
 // Page protection: without a valid session cookie every page except /login redirects to /login. (The user row and the permissions are
-// checked again by the server pages and by every API route; this only stops unauthenticated visitors early.)
+// checked again by the server pages and by every API route; this only stops unauthenticated visitors early. The deployment a token belongs
+// to (its "env" claim) is checked there too, in currentUser.)
 const PUBLIC = ['/login'];
 
 export async function middleware(req: NextRequest) {

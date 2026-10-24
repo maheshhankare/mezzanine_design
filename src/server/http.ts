@@ -64,7 +64,8 @@ export function route(opts: Opts, fn: (c: Ctx & { user: any }) => Promise<Respon
   return async (req: NextRequest, ctx: { params: Promise<any> }) => {
     try {
       checkOrigin(req);
-      const user = opts.auth === 'none' ? await currentUser().catch(() => null) : await currentUser();
+      // a database failure during the session check is reported as such (503), not as "not signed in"
+      const user = opts.auth === 'none' ? await currentUser().catch(() => null) : await currentUser({ dbErrors: 'throw' });
       if (opts.auth !== 'none' && !user) throw new HttpError(401, 'Not signed in');
       if (opts.auth === 'admin' && user!.role !== 'admin') throw new HttpError(403, 'Administrator access required');
       const out = await fn({ user, req, params: await ctx.params });

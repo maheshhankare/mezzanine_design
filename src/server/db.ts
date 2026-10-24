@@ -1,13 +1,15 @@
 import 'server-only';
 import { Pool, type QueryResultRow } from 'pg';
+import { databaseUrlProblem } from './dbGuard';
 
 // One pool per server instance. The connection string comes from the environment only and never reaches the browser.
 const g = globalThis as unknown as { __pool?: Pool };
 
 function pool(): Pool {
   if (!g.__pool) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error('DATABASE_URL is not configured');
+    const url = process.env.DATABASE_URL ?? '';
+    const problem = databaseUrlProblem(url || undefined);
+    if (problem) throw new Error(`${problem}: database connection refused`);
     // make the TLS mode explicit (the driver treats "require" as "verify-full" and warns about it)
     const cs = url.replace(/sslmode=(require|prefer|verify-ca)/, 'sslmode=verify-full');
     g.__pool = new Pool({ connectionString: cs, max: 5, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 8_000 });
