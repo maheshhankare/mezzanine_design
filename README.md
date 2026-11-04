@@ -1,64 +1,165 @@
-# C-Section Beam System Designer (secure edition)
+# Mezzanine Design — cold-formed C-section mezzanine designer
 
-Design of cold-formed lipped C-section beam systems for storage and racking mezzanines (design standard: **IS 800:2007 only**; cold-formed member resistances need IS 801, which is not implemented, and are reported as REVIEW):
-floor → surface / decking → SB-Int and SB-End secondaries → connections → main beam → box column → base plate.
+Design, analysis, optimisation and reporting of **light-gauge steel mezzanines**: cold-formed lipped C-section floor members (main beams, intermediate joists SB-Int, end beams SB-End) on hollow-section columns with vertical X-bracing, for storage and industrial floors.
 
-This edition is a client–server application: **Next.js (React, TypeScript, Tailwind) on Vercel + PostgreSQL (Neon)**.
-The structural calculation engine runs **only on the server**; the browser receives results, sketches and reports, never the engine.
+**Design basis — Indian Standards first:** IS 801:1975 (cold-formed members, working stress), IS 800:2007 (hollow sections, bolts, welds, bases, Section 12 bracing), IS 1893 (Part 1):2016 (earthquake), IS 875 (loads), IS 456:2000. EN 1993-1-1 / 1-3 / 1-5 are used **only** where the Indian Standard was reviewed and gives no method; every such check is labelled with its code basis.
 
-* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): review of the original application, what moved where, API, database, authentication
-* [`docs/SECURITY.md`](docs/SECURITY.md): what is and is not protected, security checklist, test results, remaining limitations
-* [`docs/DEPLOY.md`](docs/DEPLOY.md): hosting, environment variables, first administrator, backups
-* [`docs/IS800_ONLY_CONVERSION.md`](docs/IS800_ONLY_CONVERSION.md): the application's only design standard is IS 800:2007: what was removed, migration of stored projects, verified and pending provisions, tests, limitations
-* [`docs/IS800_ROUTE.md`](docs/IS800_ROUTE.md), [`docs/IS800_DESIGN.md`](docs/IS800_DESIGN.md), [`docs/CODE_REGISTER.md`](docs/CODE_REGISTER.md): the IS 800 provisions read, implemented and still open
-* [`docs/SECOND_ORDER.md`](docs/SECOND_ORDER.md), [`docs/RSTAB_BENCHMARK.md`](docs/RSTAB_BENCHMARK.md): the second-order frame solver (**Frame analysis (IS 800)** in the project list) and its validation against RSTAB
+> **Engineering status.** The software reports every check as PASS, FAIL, PENDING (missing data or unverified provision) or REVIEW (engineering judgement). A missing check is never shown as PASS. Results are reproducible and regression-tested, but **no independent engineering validation has been performed**; a qualified engineer must review every design before use.
+
+---
+
+## Contents
+
+1. [Features](#features)
+2. [Architecture](#architecture)
+3. [Getting started](#getting-started)
+4. [Tests](#tests)
+5. [Documentation index](#documentation-index)
+6. [Excel check workbook](#excel-check-workbook)
+7. [Project layout](#project-layout)
+8. [Roadmap](#roadmap)
+9. [Known limitations](#known-limitations)
+
+---
 
 ## Features
 
-* Sign-in with administrator-managed accounts (no self-registration); sessions expire after 8 hours.
-* Projects stored in the database: **Save Project**, **Save As New Project**, open, update (revision-checked), delete, share with other users (view / edit).
-* **Ctrl+S / Ctrl+Shift+S** never offers the page for download: it saves the *project data* to the database and says so only after the server confirms.
-* **Generate PDF Report**: server-generated from the saved, recalculated project (project data, inputs, design basis, member properties, every check with demand / resistance / utilisation / status, warnings, assumptions; page numbers and revision). No equations, source code or UI.
-* **Export / Import project data** (JSON with inputs and results only). There is no option anywhere to download the application source.
-* All 13 tabs of the C-section designer: inputs, member / connection / column / joist / knee / decking / bracing results, summary and diagnosis, optimisation (server-side search with live progress), DXF drawings.
+**Design engine (server only, engine 2.5.0)**
+* Section properties of generated C sections (centre-line model with rounded corners), single and back-to-back.
+* IS 801 member checks: effective width, lip adequacy, flat-width and web limits, bending, lateral buckling, web shear / bending / crippling, built-up connectors, bracing of channels.
+* Connections (bolts, plates, welds), box / hollow columns, base plates, decking, knee braces.
+* **Whole-structure design**: 3D model, second-order gravity analysis with notional forces, response-spectrum seismic analysis, accidental torsion, drift, brace and connection design (OCBF).
+* **Optimize Design**: bounded search over framing direction, joist count, generated C sections, bracing layouts, columns and connections; the lightest design that passes the full analysis is saved as a new revision, with its complete candidate history.
 
-## Local development
+**Projects and records**
+* Sign-in with administrator-managed accounts; per-project sharing (viewer / editor).
+* Every saved revision keeps its inputs: **revision history**, PDF report of any earlier revision, restore as a new revision.
+* Stored results carry engine version and input fingerprint; out-of-date records are flagged.
+* Server-generated **PDF calculation report** with calculation identity (project, revision, input fingerprint, engine).
+* Export / import of project data (JSON), DXF drawings.
 
-Requires Node 20+ and a PostgreSQL database (Neon works).
+**Review and insights**
+* QA readiness checklist and design assistant (explanations taken from the recorded checks — no generated values).
+* Explained optimisation (framings, layouts, weight-vs-utilisation trade-off, every candidate and decision).
+* Design comparison of two revisions, sensitivity runs (exploratory), 3D wire-frame view, engineering decision log.
+* Project dashboard, search and filters; workspace pages (usage live; organisations, roles and billing shown as previews).
+
+## Architecture
+
+```
+Browser (React UI, no engine)  ──>  Next.js API routes (session, permission, validation, audit)
+                                       ├── calculation service  ──> src/server/engine (server-only)
+                                       ├── whole-structure design / Optimize Design (src/server/structure)
+                                       ├── projects & revisions, decision log
+                                       └── PDF reports
+                                    PostgreSQL: users, projects, project_revisions, calculations, decisions, audit log
+```
+Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/saas/01_AUDIT_ARCHITECTURE_AND_PLAN.md`](docs/saas/01_AUDIT_ARCHITECTURE_AND_PLAN.md).
+
+## Getting started
+
+Requires Node 20+ and PostgreSQL.
 
 ```bash
 npm install
-cp .env.example .env.local        # then fill in DATABASE_URL and AUTH_SECRET
-npm run db:migrate                 # creates the tables
+cp .env.example .env.local          # fill in DATABASE_URL and AUTH_SECRET (never commit .env.local)
+npm run db:migrate                   # applies db/migrations/*.sql once each
 ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a long password' npm run create-admin
-npm run dev                        # http://localhost:3000
+npm run dev                          # http://localhost:3000
 ```
+Windows: use `npm.cmd` in PowerShell if script execution is disabled; if `next dev` / `next build` fails with `EINVAL … readlink … .next` (OneDrive folder), delete `.next` and retry. More: [`docs/LOCAL_RUN.md`](docs/LOCAL_RUN.md), [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-On Windows PowerShell use `npm.cmd` instead of `npm` if script execution is disabled. If `next dev` / `next build` fails with
-`EINVAL ... readlink ... .next` (the project lives in a OneDrive folder), delete the `.next` folder and run again.
+## Tests
 
-## Scripts
-
-| Command | Purpose |
+| Command | What it checks |
 |---|---|
-| `npm run dev` / `build` / `start` | Next.js |
-| `npm run typecheck` | TypeScript check |
-| `npm run db:migrate` | Apply `db/migrations/*.sql` (once each) |
-| `npm run create-admin` | Create / reset the administrator from `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
-| `npm run test:engine` | Engine smoke test + reference-case self-test (6 cases) |
-| `npm run test:api` | End-to-end API tests against a running server (see header of `scripts/test-api.mjs`) |
-| `npm run test:bundle` | After `build`: confirms no engine code or secrets in the browser bundle |
-| `npm run db:cleanup-test` | Deletes the throw-away `@example.test` accounts created by `test:api` |
+| `npm run typecheck` | TypeScript |
+| `npm run test:engine` | engine reference cases (reproducibility self-test) |
+| `npm run test:rstab` | second-order frame solver against RSTAB benchmark bounds |
+| `npm run test:codes`, `test:design`, `test:status` | code-check results, status rules (no PASS without a verified check) |
+| `npm run test:is801`, `test:en`, `test:no-en` | IS 801 checks, EN gap checks, code-scope guard |
+| `npm run test:restraint`, `test:tension`, `test:conn-ecc`, `test:slenderness`, `test:critical`, `test:seismic`, `test:final`, `test:legacy` | engineering regression suites |
+| `npm run test:structure` | whole-structure design and Optimize Design |
+| `npm run test:frame` | frame-analysis module |
+| `npm run test:auth`, `test:upload`, `test:routes`, `test:projects` | sessions, upload limits, route ownership and roles (in-memory database stand-in) |
+| `npm run test:projects-pg` | revisions, locks and constraints against a real **local test** PostgreSQL |
+| `npm run test:pdf` | PDF report generation |
+| `npm run test:api`, `test:integration`, `test:bundle` | live server, integration, browser bundle contains no engine (after `build`) |
+
+## Documentation index
+
+**Engineering**
+| Document | Content |
+|---|---|
+| [CALCULATION_METHODS.md](docs/CALCULATION_METHODS.md) | methods used by the engine |
+| [STRUCTURE_OPTIMISATION.md](docs/STRUCTURE_OPTIMISATION.md) | whole-structure design and Optimize Design |
+| [IS_CODE_COMPLIANCE_REGISTER.md](docs/IS_CODE_COMPLIANCE_REGISTER.md), [CODE_REGISTER.md](docs/CODE_REGISTER.md) | clauses implemented, verified and open |
+| [IS800_DESIGN.md](docs/IS800_DESIGN.md), [IS800_ROUTE.md](docs/IS800_ROUTE.md), [IS800_JOIST_RESTRAINT.md](docs/IS800_JOIST_RESTRAINT.md), [IS800_ONLY_CONVERSION.md](docs/IS800_ONLY_CONVERSION.md) | IS 800 provisions and design route |
+| [SECOND_ORDER.md](docs/SECOND_ORDER.md), [SECOND_ORDER_TECHNICAL_NOTE.md](docs/SECOND_ORDER_TECHNICAL_NOTE.md) | second-order frame solver |
+| [RSTAB_BENCHMARK.md](docs/RSTAB_BENCHMARK.md), [RSTAB_TEST_MODELS.md](docs/RSTAB_TEST_MODELS.md) | benchmark against RSTAB |
+| [TECHNICAL_DECISIONS_6.3_6.4.md](docs/TECHNICAL_DECISIONS_6.3_6.4.md), [TECHNICAL_VALIDATION_REPORT_6.3_6.4.md](docs/TECHNICAL_VALIDATION_REPORT_6.3_6.4.md) | IS 800 6.3 / 6.4 decisions and validation |
+| [FOUNDATION_AND_LOCAL_CHECK_REFERENCES.md](docs/FOUNDATION_AND_LOCAL_CHECK_REFERENCES.md), [REFERENCES.md](docs/REFERENCES.md) | references |
+| [VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md) | validation status |
+| [MASTER_ISSUE_REGISTER.md](docs/MASTER_ISSUE_REGISTER.md), [PENDING_ITEMS.md](docs/PENDING_ITEMS.md), [OUTSTANDING_ITEMS_REGISTER.md](docs/OUTSTANDING_ITEMS_REGISTER.md), [REQUIRED_DOCUMENTS.md](docs/REQUIRED_DOCUMENTS.md) | open issues, decisions needed, documents required |
+| [COMPLETION_REPORT_2026-10-26.md](docs/COMPLETION_REPORT_2026-10-26.md) | completion report |
+
+**Software, security and deployment**
+| Document | Content |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | application architecture, API, database, authentication |
+| [SECURITY.md](docs/SECURITY.md) | what is protected, checklist, test results, limitations |
+| [DEPLOY.md](docs/DEPLOY.md), [DEPLOYMENT_READINESS.md](docs/DEPLOYMENT_READINESS.md), [LOCAL_RUN.md](docs/LOCAL_RUN.md) | hosting, environment, readiness, local run |
+
+**Product roadmap (SaaS)**
+| Document | Content |
+|---|---|
+| [01 Audit, architecture and plan](docs/saas/01_AUDIT_ARCHITECTURE_AND_PLAN.md) | verified audit, target architecture, five phases |
+| [02 Product requirements and backlog](docs/saas/02_PRODUCT_REQUIREMENTS_AND_BACKLOG.md) | requirements by module, prioritised backlog |
+| [03 Tenant data model and security](docs/saas/03_TENANT_DATA_MODEL_AND_SECURITY.md) | organisations, roles, row-level security, security plan |
+| [04 Pricing and monetisation research](docs/saas/04_PRICING_AND_MONETISATION_RESEARCH.md) | research plan and cost model (no prices set) |
+| [05 Deployment-readiness requirements](docs/saas/05_DEPLOYMENT_READINESS_REQUIREMENTS.md) | checklist for a multi-customer service |
+| [06 Phase 1 validation report](docs/saas/06_PHASE1_VALIDATION_REPORT.md) | revision history, stale records, run lock — tests |
+| [07 Front end for all phases](docs/saas/07_FRONTEND_ALL_PHASES.md) | screens, data sources, live vs preview |
+
+## Excel check workbook
+
+[`docs/excel_tool`](docs/excel_tool) — an independent, formula-driven Excel check of a defined subset of the calculation (sections, IS 801 member checks, columns, bracing, connections, bases, seismic weight), compared with the application results.
+* `Mezzanine_Design_Professional_v2.xlsx` (recommended: simplified input tabs, dimensioned sketches, force diagrams) and v1
+* `README_Excel_Tool.pdf` (user guide), `VALIDATION_REPORT.md`, `Mezzanine_Design_Calculation_Report.pdf`
+* `Mezzanine_Design_Macros.bas` (optional VBA, not tested), `source/` (scripts that rebuild the workbooks)
 
 ## Project layout
 
 ```
-db/migrations/        SQL schema
-scripts/              migrate, create-admin, tests
-src/shared/           code that runs in BOTH places: input schema, units, check helpers (no calculation logic)
-src/server/engine/    the calculation engine, optimiser, drawings. `server-only`: the build fails if the browser imports it
-src/server/           database, sessions, validation, calculation service, PDF builder, optimiser session
+db/migrations/        SQL schema (001 init, 002 frame, 003 structure, 004 revisions, 005 decisions)
+scripts/              migrate, create-admin, test suites
+src/shared/           shared by browser and server: input schema, units, check helpers, plans (no calculation logic)
+src/server/engine/    calculation engine (server-only: the build fails if the browser imports it)
+src/server/structure/ whole-structure model, analysis, sizing and Optimize Design
+src/server/           database, sessions, validation, projects & revisions, PDF
 src/app/api/          authenticated API routes
-src/app/              pages: /login, / (projects), /p/[id] (the tool), /admin
-src/components/       React UI
+src/app/              pages: /login, / (projects), /p/[id] (designer), /frame, /settings, /admin
+src/components/       React UI (panels/Insights.tsx: review & insights)
+docs/                 engineering, software and product documentation; Excel tool
 ```
+
+## Roadmap
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1 Stabilise | reliable calculation records, revision history, stale detection, run lock, route security tests | first increment done |
+| 2 Differentiate | explained optimisation, comparison, sensitivity, decision log, QA checklist | front end done |
+| 3 SaaS foundation | organisations, roles, row-level security, invitations, MFA, background jobs, stored reports | planned |
+| 4 Commercial | plans, entitlements, usage accounting, payments | planned (no prices set) |
+| 5 Scale | DXF / IFC exchange, cost data, more structural modules | planned |
+
+## Known limitations
+
+* Fixed column bases are an analysis assumption; fixity, anchors in concrete and slab punching are not demonstrated (PENDING).
+* Grating capacity needs the manufacturer's load table; IS 800 amendments and material certificates are outstanding.
+* Long optimisation runs execute inside one web request (a job system is planned).
+* Organisations, billing and multi-factor authentication are not implemented yet.
+* No independent engineering validation has been performed.
+
+---
+*Not for construction without review and approval by a qualified structural engineer.*
